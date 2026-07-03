@@ -8,6 +8,7 @@
     <img alt="Nivel" src="https://img.shields.io/badge/nivel-intermedio-2f9e44">
     <img alt="Idioma" src="https://img.shields.io/badge/idioma-español-blue">
   </p>
+  <p>🌐 <strong>Sitio del curso:</strong> <a href="https://fjanuszewski.github.io/observabilidad-monitoreo-aws/">fjanuszewski.github.io/observabilidad-monitoreo-aws</a></p>
 </div>
 
 ---
