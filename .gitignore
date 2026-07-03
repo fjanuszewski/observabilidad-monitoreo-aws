@@ -1,0 +1,24 @@
+# Screenshots de validación
+.playwright-mcp/
+*.tmp.png
+ref-*.png
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Artefactos locales de AWS/CloudFormation
+packaged-*.yaml
+*.packaged.yaml
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Config local del harness
+.claude/

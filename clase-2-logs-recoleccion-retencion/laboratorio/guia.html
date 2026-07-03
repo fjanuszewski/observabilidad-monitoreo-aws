@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio · Clase 2 — Logs: recolección, lectura y retención</title>
+  <link rel="stylesheet" href="../../assets/css/guide.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+
+<header class="g-top">
+  <img src="../../assets/img/logo-curso.svg" alt="">
+  <div>
+    <div class="g-title">Laboratorio · Clase 2 — Logs: recolección, lectura y retención</div>
+    <div class="g-sub">Observabilidad y Monitoreo en AWS</div>
+  </div>
+  <span class="g-spacer"></span>
+  <span class="g-badge">CloudFormation</span>
+</header>
+
+<div class="g-wrap">
+  <!-- ---------------- SIDEBAR / TOC ---------------- -->
+  <aside class="g-side">
+    <p class="toc-title">Contenido</p>
+    <nav>
+      <a href="#intro">Introducción</a>
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#requisitos">Requisitos previos</a>
+      <a href="#desplegar">Desplegar el stack</a>
+      <a href="#verificar">Verificar en la consola</a>
+      <a href="#investigacion">Escenario de investigación</a>
+      <a href="#explorar">Explorar y experimentar</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#limpieza">Limpieza</a>
+    </nav>
+  </aside>
+
+  <!-- ---------------- CONTENIDO ---------------- -->
+  <main class="g-main">
+    <section id="intro">
+      <span class="eyebrow">Clase 2 · Laboratorio</span>
+      <h1>Logs: recolección, lectura y retención</h1>
+      <p class="g-lead">Vas a centralizar los logs de una app que corre en EC2 dentro de Amazon CloudWatch Logs, definir su retención, contar los errores con un metric filter y una alarma, y usar Logs Insights para localizarlos durante un troubleshooting. Todo declarado como código en una plantilla de CloudFormation.</p>
+
+      <div class="g-meta">
+        <span class="m">⏱ <b>Duración</b>&nbsp;· 30–45 min</span>
+        <span class="m">💵 <b>Costo</b>&nbsp;· &lt; USD 1 (si limpiás al terminar)</span>
+        <span class="m">📊 <b>Nivel</b>&nbsp;· Intermedio</span>
+        <span class="m">🌎 <b>Región sugerida</b>&nbsp;· us-east-1</span>
+      </div>
+
+      <div class="svc-row">
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch-logs.svg" alt="">CloudWatch Logs</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt="">CloudWatch Alarms</span>
+        <span class="svc-chip"><img src="../../assets/img/services/ec2.svg" alt="">EC2</span>
+        <span class="svc-chip"><img src="../../assets/img/services/kms.svg" alt="">KMS</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+        <span class="svc-chip"><img src="../../assets/img/services/iam.svg" alt="">IAM</span>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <h2>Arquitectura</h2>
+      <p>La app en EC2 escribe un archivo de log; el agente unificado de CloudWatch lo publica en un log group con retención definida. Sobre ese log group, un metric filter cuenta las líneas <code>ERROR</code> y alimenta una alarma que (opcionalmente) notifica por SNS. Una consulta de Logs Insights queda guardada para el troubleshooting.</p>
+      <table>
+        <thead><tr><th>Recurso</th><th>Servicio</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td>Instancia t3.micro + agente</td><td>EC2</td><td>Genera la app y publica sus logs</td></tr>
+          <tr><td>Log group con <code>RetentionInDays</code></td><td>CloudWatch Logs</td><td>Almacena los logs y define la rotación</td></tr>
+          <tr><td>Metric filter <code>contar-errores</code></td><td>CloudWatch Logs</td><td>Convierte líneas ERROR en una métrica</td></tr>
+          <tr><td>Alarma <code>obs-clase-2-errores</code></td><td>CloudWatch Alarms</td><td>Pasa a ALARM al superar el umbral</td></tr>
+          <tr><td>QueryDefinition guardada</td><td>CloudWatch Logs</td><td>Consulta de Logs Insights reutilizable</td></tr>
+          <tr><td>Topic SNS (opcional)</td><td>SNS</td><td>Notifica por email al disparar la alarma</td></tr>
+          <tr><td>KMS key (opcional)</td><td>KMS</td><td>Cifra el log group en reposo</td></tr>
+          <tr><td>Rol e instance profile</td><td>IAM</td><td>Autoriza al agente a escribir en Logs</td></tr>
+        </tbody>
+      </table>
+      <div class="tip"><b class="t">Clase de log group</b>El parámetro <code>LogGroupClass</code> permite elegir <b>STANDARD</b> (habilita metric filters, Live Tail y subscription filters) o <b>INFREQUENT_ACCESS</b> (más barato, solo consultable con Logs Insights). El metric filter y la alarma solo se crean con la clase STANDARD.</div>
+    </section>
+
+    <section id="requisitos">
+      <h2>Requisitos previos</h2>
+      <ul>
+        <li>Cuenta de AWS con permisos para crear EC2, CloudWatch Logs, IAM, SNS y KMS.</li>
+        <li>Una VPC por defecto en la región (las cuentas nuevas ya la traen); la instancia se lanza ahí sin abrir puertos.</li>
+        <li>Acceso a la consola web de AWS. Se muestra también la vía CLI (opcional).</li>
+        <li>Como se crean roles con nombre, al desplegar hay que aceptar la capacidad <code>CAPABILITY_NAMED_IAM</code>.</li>
+      </ul>
+      <div class="warn"><b class="t">Atención al costo</b>Todos los recursos son de bajo costo (una t3.micro y un disco gp3 chico), pero recordá ejecutar la <a href="#limpieza">limpieza</a> al terminar para no dejar la instancia corriendo.</div>
+    </section>
+
+    <section id="desplegar">
+      <h2>Desplegar el stack</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Iniciar sesión y elegir la región</h3>
+          <p>Ingresá a la consola de AWS y seleccioná la región del laboratorio.</p>
+          <div class="console-path"><b>Consola AWS</b><span class="sep">›</span> selector de región (arriba a la derecha) <span class="sep">›</span> <b>US East (N. Virginia) us-east-1</b></div>
+        </div>
+
+        <div class="step">
+          <h3>Abrir CloudFormation y crear el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>Create stack</b> <span class="sep">›</span> With new resources</div>
+          <p>Elegí <b>Upload a template file</b> y subí el archivo <code>template.yaml</code> de esta carpeta.</p>
+        </div>
+
+        <div class="step">
+          <h3>Nombre y parámetros</h3>
+          <p>Poné un nombre al stack (por ejemplo <code>obs-clase-2</code>) y revisá los parámetros. Los defaults ya sirven; si querés recibir la notificación por email, completá <code>NotificationEmail</code>, y si querés cifrar el log group poné <code>EnableKmsEncryption</code> en <code>true</code>.</p>
+          <div class="tip"><b class="t">Alternativa por CLI</b>Si preferís la línea de comandos (usa <code>parameters.example.json</code> de esta carpeta):</div>
+          <div class="code">
+            <div class="code-head"><span>bash · desplegar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation deploy \
+  --stack-name obs-clase-2 \
+  --template-file template.yaml \
+  --parameter-overrides file://parameters.example.json \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1</pre>
+          </div>
+          <div class="tip"><b class="t">Nota</b><code>deploy</code> también acepta los parámetros inline: <code>--parameter-overrides RetentionInDays=7 NotificationEmail=vos@ejemplo.com</code>.</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar y crear</h3>
+          <p>Aceptá la casilla de capacidades de IAM (<code>CAPABILITY_NAMED_IAM</code>) y presioná <b>Submit</b>. Esperá el estado <code>CREATE_COMPLETE</code> (1–3 minutos).</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack aparece en estado <b>CREATE_COMPLETE</b> y la pestaña <b>Resources</b> lista el log group, el metric filter, la alarma, la instancia EC2 y el rol IAM.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="verificar">
+      <h2>Verificar en la consola</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Confirmar que llegan los logs</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Logs <span class="sep">›</span> Log groups <span class="sep">›</span> <b>/obs/clase-2/app</b></div>
+          <p>Abrí el log group y entrá al log stream de la instancia. Deberías ver líneas <code>INFO</code> y, cada pocos minutos, líneas <code>ERROR</code>. Revisá también que el log group muestre <b>Retention: 7 days</b>.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · ver logs por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws logs tail /obs/clase-2/app --follow --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Aparecen eventos en el log stream y la retención figura en 7 días (dales 3–5 minutos tras el <code>CREATE_COMPLETE</code>).</div>
+        </div>
+
+        <div class="step">
+          <h3>Ver la métrica del metric filter</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Metrics <span class="sep">›</span> All metrics <span class="sep">›</span> <b>Obs/Clase2</b> <span class="sep">›</span> AppErrorCount</div>
+          <p>Confirmá que la métrica <code>AppErrorCount</code> existe y publica datos (gracias a <code>DefaultValue: 0</code> vas a ver ceros incluso sin errores).</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La métrica aparece con puntos de datos y sube cuando la app registra un ERROR.</div>
+        </div>
+
+        <div class="step">
+          <h3>Revisar la alarma y la consulta guardada</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Alarms <span class="sep">›</span> <b>obs-clase-2-errores</b></div>
+          <p>La alarma arranca en <b>OK</b> o <b>INSUFFICIENT_DATA</b> y pasa a <b>ALARM</b> cuando la métrica supera el umbral. La consulta guardada está en <b>Logs</b> › <b>Logs Insights</b> › <b>Queries</b> › <b>Obs-Clase2/Errores-por-periodo</b>.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Ves la alarma en la lista y la consulta guardada disponible para ejecutar.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="investigacion">
+      <h2>Escenario de investigación</h2>
+      <p>Objetivo: <b>generar errores en la app, ver la alarma pasar a ALARM y usar Logs Insights para localizar y contar los errores por período</b> — el flujo real de un troubleshooting.</p>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Conectarte a la instancia (Session Manager)</h3>
+          <div class="console-path"><b>EC2</b><span class="sep">›</span> Instances <span class="sep">›</span> <b>obs-clase-2-app</b> <span class="sep">›</span> Connect <span class="sep">›</span> Session Manager <span class="sep">›</span> Connect</div>
+          <p>No hace falta SSH ni abrir puertos: el rol IAM incluye <code>AmazonSSMManagedInstanceCore</code>. Por CLI:</p>
+          <div class="code">
+            <div class="code-head"><span>bash · abrir sesión SSM</span><button class="copy-btn">copiar</button></div>
+            <pre>aws ssm start-session --target &lt;INSTANCE_ID&gt; --region us-east-1</pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Inyectar líneas ERROR a mano</h3>
+          <p>Ya dentro de la instancia, escribí varias líneas ERROR en el archivo que el agente vigila para acelerar el disparo de la alarma:</p>
+          <div class="code">
+            <div class="code-head"><span>bash · generar errores</span><button class="copy-btn">copiar</button></div>
+            <pre>for i in $(seq 1 10); do
+  echo "$(date -u +%FT%TZ) ERROR request id=demo-$i status=500 msg='forced error'" \
+    | sudo tee -a /var/log/app/app.log
+done</pre>
+          </div>
+          <div class="tip"><b class="t">Qué pasa</b>El agente publica esas líneas en el log group, el metric filter las cuenta y <code>AppErrorCount</code> sube por encima del umbral.</div>
+        </div>
+
+        <div class="step">
+          <h3>Ver la alarma pasar a ALARM</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Alarms <span class="sep">›</span> <b>obs-clase-2-errores</b></div>
+          <p>En 1–2 minutos la alarma cambia a <b>ALARM</b>. Si configuraste <code>NotificationEmail</code> (y confirmaste la suscripción SNS), te llega el correo. Verificá por CLI:</p>
+          <div class="code">
+            <div class="code-head"><span>bash · estado de la alarma</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudwatch describe-alarms \
+  --alarm-names obs-clase-2-errores-obs-clase-2 \
+  --query "MetricAlarms[0].StateValue" --output text \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La alarma muestra <b>ALARM</b> y (si aplica) llegó la notificación por email.</div>
+        </div>
+
+        <div class="step">
+          <h3>Localizar y contar los errores con Logs Insights</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Logs <span class="sep">›</span> Logs Insights <span class="sep">›</span> log group <b>/obs/clase-2/app</b></div>
+          <p>Ejecutá la consulta guardada para <b>listar</b> los errores del período, y una variante con <code>stats</code> para <b>contarlos por minuto</b>. Acordate de acotar el rango de tiempo (por ejemplo, últimos 30 min) antes de correrla.</p>
+          <div class="code">
+            <div class="code-head"><span>Logs Insights · listar errores</span><button class="copy-btn">copiar</button></div>
+            <pre>fields @timestamp, @message
+| filter @message like /ERROR/
+| sort @timestamp desc
+| limit 100</pre>
+          </div>
+          <div class="code">
+            <div class="code-head"><span>Logs Insights · contar errores por minuto</span><button class="copy-btn">copiar</button></div>
+            <pre>fields @timestamp, @message
+| filter @message like /ERROR/
+| stats count(*) as errores by bin(1m)
+| sort errores desc</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La consulta devuelve las líneas ERROR (incluyendo tus <code>forced error</code>) y el <code>stats</code> muestra el conteo por minuto.</div>
+        </div>
+
+        <div class="step">
+          <h3>(Opcional) Ver los errores en vivo con Live Tail</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Logs <span class="sep">›</span> <b>Live Tail</b> <span class="sep">›</span> log group <b>/obs/clase-2/app</b></div>
+          <p>Iniciá una sesión de Live Tail con el filtro <code>ERROR</code> y volvé a inyectar líneas: vas a verlas aparecer en streaming en tiempo real. Live Tail solo funciona en log groups de clase STANDARD.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="explorar">
+      <h2>Explorar y experimentar</h2>
+      <p>Ideas para profundizar en el pilar de logs:</p>
+      <ul>
+        <li><b>Retención:</b> volvé a desplegar con <code>RetentionInDays=1</code> o <code>=30</code> y observá el cambio en el log group. Sin este parámetro la retención sería indefinida (costo creciente).</li>
+        <li><b>Clase de log:</b> probá <code>LogGroupClass=INFREQUENT_ACCESS</code> y comprobá que el stack ya no crea metric filter ni alarma (esa clase no los soporta), pero sí se puede consultar con Logs Insights.</li>
+        <li><b>Cifrado KMS:</b> desplegá con <code>EnableKmsEncryption=true</code> y verificá en el log group que aparece la KMS key asociada.</li>
+        <li><b>Umbral:</b> subí <code>ErrorThreshold</code> a 5 y mirá cuántos errores hacen falta para disparar la alarma.</li>
+        <li><b>FilterPattern:</b> cambiá el patrón del metric filter (por ejemplo a <code>"status=500"</code>) y observá cómo cambia el conteo.</li>
+      </ul>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <p>Problemas frecuentes y cómo resolverlos. Ideal para practicar diagnóstico. Hay más casos en <code>troubleshooting.md</code>.</p>
+      <div class="trouble">
+        <details>
+          <summary>La alarma nunca sale de INSUFFICIENT_DATA</summary>
+          <p><span class="sym">Síntoma:</span> la alarma no dispara ni siquiera con errores.</p>
+          <p><span class="fix">Solución:</span> el metric filter solo publica dato cuando hay coincidencias. La plantilla usa <code>DefaultValue: 0</code> y la alarma usa <code>TreatMissingData: notBreaching</code>. Verificá que la instancia esté generando ERROR y esperá un par de períodos de 60 s.</p>
+        </details>
+        <details>
+          <summary>Los logs de EC2 no aparecen en el log group</summary>
+          <p><span class="sym">Síntoma:</span> el log group existe pero está vacío.</p>
+          <p><span class="fix">Solución:</span> casi siempre es el agente. Entrá por SSM y revisá <code>sudo cat /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log</code> y que el archivo <code>/var/log/app/app.log</code> exista. Confirmá que el rol de la instancia tenga <code>CloudWatchAgentServerPolicy</code>.</p>
+        </details>
+        <details>
+          <summary>El FilterPattern no cuenta lo que espero</summary>
+          <p><span class="sym">Síntoma:</span> la métrica queda en 0 aunque hay errores.</p>
+          <p><span class="fix">Solución:</span> la sintaxis de patrones distingue mayúsculas/minúsculas. <code>ERROR</code> no matchea <code>error</code>. Ajustá el <code>FilterPattern</code> del metric filter y volvé a desplegar.</p>
+        </details>
+        <details>
+          <summary>El stack queda en ROLLBACK_COMPLETE</summary>
+          <p><span class="sym">Síntoma:</span> la creación falla y se revierte.</p>
+          <p><span class="fix">Solución:</span> abrí la pestaña <b>Events</b> y buscá el primer error. Causas típicas: no aceptar <code>CAPABILITY_NAMED_IAM</code>, un email con formato inválido, o (con KMS) una key policy que no autoriza al servicio de logs.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="limpieza">
+      <h2>Limpieza</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>Eliminar el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>obs-clase-2</b> <span class="sep">›</span> Delete</div>
+          <p>Borrar el stack elimina la instancia EC2, el log group (con sus logs), el metric filter, la alarma, la consulta guardada y, si los creaste, el topic SNS y la KMS key. No hay <code>DeletionPolicy: Retain</code>, así que no queda nada facturable.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · eliminar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation delete-stack --stack-name obs-clase-2 --region us-east-1</pre>
+          </div>
+          <div class="tip"><b class="t">KMS</b>Si habilitaste el cifrado, la KMS key entra en estado <b>Pending deletion</b> (ventana de espera por defecto). No genera costo relevante y se elimina sola al vencer el plazo.</div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack desaparece de la lista (estado <b>DELETE_COMPLETE</b>) y el log group ya no aparece en CloudWatch Logs.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="g-nav">
+      <a href="../presentacion/index.html">← Ver la presentación</a>
+      <a href="../../README.md">Índice del curso →</a>
+    </div>
+
+    <footer class="g-foot">Observabilidad y Monitoreo en AWS · Clase 2 · Laboratorio</footer>
+  </main>
+</div>
+
+<script src="../../assets/js/guide.js"></script>
+</body>
+</html>

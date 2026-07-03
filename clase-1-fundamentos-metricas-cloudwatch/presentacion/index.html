@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clase 1 — Fundamentos, métricas y monitoreo de EC2 con CloudWatch</title>
+  <link rel="stylesheet" href="../../assets/css/slides.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ============ 1. PORTADA ============ -->
+  <section class="slide slide--title">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span>
+      <span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <img class="title-logo" src="../../assets/img/logo-curso.svg" alt="">
+      <div class="eyebrow">Programa de capacitación · Clase 1 de 5</div>
+      <h1>Fundamentos, métricas y monitoreo de EC2 con CloudWatch</h1>
+      <p class="lead">Los pilares de la observabilidad y las métricas de tu infraestructura.</p>
+      <div class="title-meta">
+        <span class="title-chip"><img src="../../assets/img/services/cloudwatch.svg" alt="">Amazon CloudWatch</span>
+        <span class="title-chip"><img src="../../assets/img/services/ec2.svg" alt="">Amazon EC2</span>
+        <span class="title-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+        <span class="title-chip">⏱ ~2 horas · 🧪 Laboratorio incluido</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OBJETIVOS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Objetivos</div>
+      <h2>Qué vas a lograr en esta clase</h2>
+      <ul class="checklist">
+        <li>Comprender los pilares de la observabilidad y cómo se aplican en AWS.</li>
+        <li>Recolectar, publicar y consultar métricas con Amazon CloudWatch.</li>
+        <li>Instrumentar una instancia EC2 con el agente unificado de CloudWatch.</li>
+        <li>Desplegar la base del entorno con CloudFormation, como infraestructura-como-código.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 3. DIVISOR MÓDULO 1 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 1</div>
+      <h2>Fundamentos de observabilidad y monitoreo</h2>
+      <p>De qué hablamos cuando hablamos de observar un sistema: pilares, señales y objetivos de nivel de servicio.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4. MONITOREO VS OBSERVABILIDAD + PILARES ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 1 · Conceptos base</div>
+      <h2>Monitoreo, observabilidad y sus pilares</h2>
+      <div class="cols">
+        <div>
+          <p><strong>Monitoreo</strong> responde a preguntas que ya sabías hacer (¿está caído?, ¿pasó el umbral?). La <strong>observabilidad</strong> te permite explorar el sistema y responder preguntas nuevas que no anticipaste.</p>
+          <h3>Los tres pilares (+ eventos)</h3>
+          <ul>
+            <li><strong>Métricas:</strong> valores numéricos agregados en el tiempo.</li>
+            <li><strong>Logs:</strong> registros discretos de lo que ocurrió.</li>
+            <li><strong>Trazas:</strong> el recorrido de una petición entre servicios.</li>
+            <li><strong>Eventos:</strong> cambios de estado relevantes del sistema.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>🔭 El foco de esta clase</h3>
+          <p>Arrancamos por el pilar de las <strong>métricas</strong>: cómo se generan, se publican y se consultan en AWS. Logs y trazas llegan en las clases siguientes.</p>
+          <span class="pill pill--orange">Pilar: métricas</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. GOLDEN SIGNALS / RED-USE / SLO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 1 · Qué medir</div>
+      <h2>Señales, métodos y objetivos de servicio</h2>
+      <div class="cards g3">
+        <div class="card">
+          <h3>Golden signals</h3>
+          <p><strong>Latencia, tráfico, errores y saturación:</strong> las cuatro señales que resumen la salud de un servicio orientado a usuarios.</p>
+        </div>
+        <div class="card">
+          <h3>RED &amp; USE</h3>
+          <p><strong>RED</strong> (Rate, Errors, Duration) para servicios de peticiones; <strong>USE</strong> (Utilization, Saturation, Errors) para recursos como CPU o disco.</p>
+        </div>
+        <div class="card">
+          <h3>SLI · SLO · Error budget</h3>
+          <p>El <strong>SLI</strong> mide, el <strong>SLO</strong> fija la meta y el <strong>error budget</strong> es cuánto podés fallar sin romper el objetivo.</p>
+        </div>
+      </div>
+      <div class="callout callout--info">
+        <div class="callout-title">🧭 Idea clave</div>
+        <p>Estos marcos deciden <em>qué</em> métricas valen la pena. CloudWatch es el <em>dónde</em> las recolectás y consultás.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. PANORAMA DE SERVICIOS AWS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 1 · Panorama</div>
+      <h2>Servicios que vas a usar</h2>
+      <div class="svc-grid">
+        <div class="svc-tile"><img src="../../assets/img/services/cloudwatch.svg" alt=""><span class="n">CloudWatch</span><span class="d">Métricas, logs y eventos</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/ec2.svg" alt=""><span class="n">Amazon EC2</span><span class="d">Cómputo a monitorear</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/cloudformation.svg" alt=""><span class="n">CloudFormation</span><span class="d">Infra como código</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/systems-manager.svg" alt=""><span class="n">Systems Manager</span><span class="d">Config del agente y acceso</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/vpc.svg" alt=""><span class="n">Amazon VPC</span><span class="d">Red del entorno</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/iam.svg" alt=""><span class="n">AWS IAM</span><span class="d">Permisos sin credenciales</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. DIVISOR MÓDULO 2 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 2</div>
+      <h2>Métricas con Amazon CloudWatch</h2>
+      <p>Cómo se organizan, se publican y se consultan las métricas en la plataforma central de observabilidad de AWS.</p>
+    </div>
+  </section>
+
+  <!-- ============ 8. SERVICIO CLOUDWATCH ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudwatch.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>Amazon CloudWatch</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Servicio de observabilidad que recolecta métricas, logs y eventos de recursos y aplicaciones. Provee métricas nativas de AWS y permite publicar las tuyas, con alarmas, dashboards y consultas.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Namespaces y dimensiones:</strong> namespace (<code>AWS/EC2</code>, <code>CWAgent</code>) + nombre + dimensiones (<code>InstanceId</code>) definen una métrica única.</li>
+            <li><strong>Resolución y retención:</strong> estándar (1 min) vs alta (hasta 1 s); se conservan hasta 15 meses con granularidad decreciente.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Es el destino de todas las métricas del lab: las del hipervisor de EC2 (<code>AWS/EC2</code>), las del SO que publica el agente (<code>CWAgent</code>) y la métrica personalizada.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. PUBLICAR Y CONSULTAR MÉTRICAS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 2 · Publicar y consultar</div>
+      <h2>De PutMetricData a Metrics Insights</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li><strong>PutMetricData:</strong> API para publicar métricas personalizadas (valores, arrays o <code>StatisticSet</code>).</li>
+            <li><strong>EMF:</strong> métricas embebidas en logs JSON que CloudWatch extrae, sin llamadas síncronas.</li>
+            <li><strong>Metric math</strong> combina y transforma métricas; la <strong>detección de anomalías</strong> aprende una banda esperada.</li>
+            <li><strong>Metrics Insights:</strong> consultas tipo SQL sobre tus métricas más recientes.</li>
+          </ul>
+          <div class="callout callout--tip">
+            <div class="callout-title">Buena práctica</div>
+            <p>Cuidá la cardinalidad: cada combinación de dimensiones es una métrica facturable. EMF ayuda a controlar el volumen.</p>
+          </div>
+        </div>
+        <div>
+          <div class="code">
+            <pre><span class="c"># publicar una métrica personalizada</span>
+aws cloudwatch put-metric-data \
+  --namespace <span class="s">"Curso/Obs"</span> \
+  --metric-name <span class="s">"TareasProcesadas"</span> \
+  --dimensions <span class="s">InstanceId=i-0abc123</span> \
+  --value <span class="s">1</span>
+
+<span class="c"># consulta tipo SQL (Metrics Insights)</span>
+<span class="k">SELECT</span> AVG(mem_used_percent)
+<span class="k">FROM</span> <span class="s">"CWAgent"</span>
+<span class="k">GROUP BY</span> InstanceId</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. DIVISOR MÓDULO 3 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 3</div>
+      <h2>Monitoreo de EC2 con el agente de CloudWatch</h2>
+      <p>El hipervisor no ve dentro del sistema operativo. El agente unificado sí: memoria, disco, procesos y logs.</p>
+    </div>
+  </section>
+
+  <!-- ============ 11. SERVICIO EC2 + AGENTE ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/ec2.svg" alt="">
+        <div>
+          <span class="cat">Compute</span>
+          <h2>Amazon EC2 y el agente unificado</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>EC2 provee instancias de cómputo y publica métricas del <strong>hipervisor</strong> sin agente. Pero no ve lo que pasa dentro del SO invitado.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Sin agente:</strong> <code>CPUUtilization</code>, <code>NetworkIn/Out</code>, <code>StatusCheckFailed</code> en <code>AWS/EC2</code>.</li>
+            <li><strong>El hipervisor no ve</strong> memoria usada, uso de disco por filesystem ni procesos: eso requiere el agente corriendo dentro.</li>
+            <li><strong>UserData</strong> instala y configura el agente en el primer arranque.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Una <code>t3.micro</code> es el host monitoreado. Su UserData instala el agente, que lee su config desde SSM y publica <code>mem_used_percent</code> y <code>disk_used_percent</code> en <code>CWAgent</code>.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 12. HIPERVISOR VS SO + SSM ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 3 · Config y despliegue</div>
+      <h2>Config versionada y acceso sin SSH</h2>
+      <div class="cols">
+        <div>
+          <div class="svc"><img src="../../assets/img/services/systems-manager.svg" alt="">AWS Systems Manager</div>
+          <ul>
+            <li><strong>Parameter Store</strong> guarda la config JSON del agente de forma versionada; la instancia la recupera al arrancar.</li>
+            <li><strong>Session Manager</strong> te da shell a la instancia sin SSH, sin puertos abiertos ni bastión.</li>
+            <li><strong>Run Command</strong> despliega el agente a escala en flotas de instancias.</li>
+          </ul>
+        </div>
+        <div>
+          <div class="svc"><img src="../../assets/img/services/iam.svg" alt="">AWS IAM</div>
+          <ul>
+            <li>El agente accede a AWS mediante un <strong>instance profile</strong>, sin credenciales estáticas.</li>
+            <li><code>CloudWatchAgentServerPolicy</code> habilita <code>PutMetricData</code> y leer la config en SSM.</li>
+            <li><code>AmazonSSMManagedInstanceCore</code> habilita Session Manager.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout callout--warn">
+        <div class="callout-title">⚠️ Error frecuente</div>
+        <p>Si buscás <code>mem_used_percent</code> en <code>AWS/EC2</code> no aparece: vive en <code>CWAgent</code> y solo existe si el agente está corriendo y configurado.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 13. DIVISOR MÓDULO 4 + CLOUDFORMATION ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudformation.svg" alt="">
+        <div>
+          <span class="cat">Módulo 4 · Infraestructura como código</span>
+          <h2>AWS CloudFormation</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Anatomía de una plantilla</h3>
+          <ul>
+            <li><strong>Parameters:</strong> entradas configurables del stack.</li>
+            <li><strong>Resources:</strong> la única sección obligatoria; declara qué crear.</li>
+            <li><strong>Outputs:</strong> valores exportables (IDs, endpoints, comandos).</li>
+            <li><strong>Funciones intrínsecas:</strong> <code>!Ref</code>, <code>!GetAtt</code>, <code>!Sub</code> componen valores entre recursos.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 Por qué como código</h3>
+          <p>Definir la observabilidad como código (VPC, EC2, IAM, config del agente) da entornos reproducibles, versionables y auditables. Un <strong>change set</strong> previsualiza los cambios.</p>
+          <span class="pill pill--orange">Despliega todo el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 14. DIAGRAMA DE ARQUITECTURA DEL LAB ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Arquitectura del laboratorio</div>
+      <h2>Cómo fluyen las métricas</h2>
+      <div class="arch">
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/cloudformation.svg" alt=""><span class="lbl">CloudFormation</span><span class="sub">despliega el stack</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/vpc.svg" alt=""><span class="lbl">VPC + subred</span><span class="sub">IGW · salida</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/systems-manager.svg" alt=""><span class="lbl">SSM Param Store</span><span class="sub">config del agente</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/ec2.svg" alt=""><span class="lbl">EC2 + Agent</span><span class="sub">UserData</span></div>
+        </div>
+        <div class="flow" style="margin-top:14px">
+          <div class="node"><img src="../../assets/img/services/ec2.svg" alt=""><span class="lbl">EC2 (hipervisor)</span><span class="sub">CPUUtilization</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch.svg" alt=""><span class="lbl">CloudWatch</span><span class="sub">AWS/EC2 · CWAgent · custom</span></div>
+          <span class="arrow">←</span>
+          <div class="node"><img src="../../assets/img/services/ec2.svg" alt=""><span class="lbl">Agent + custom</span><span class="sub">mem · disk · PutMetricData</span></div>
+        </div>
+        <p class="arch-caption">Dos rutas de métricas hacia CloudWatch: hipervisor (sin agente) y sistema operativo (con agente), más la métrica personalizada por PutMetricData.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 15. SLIDE DE LABORATORIO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Manos a la obra</div>
+      <h2>Laboratorio de la clase</h2>
+      <div class="callout callout--lab">
+        <div class="callout-title">🧪 Qué vas a construir</div>
+        <p>Con una sola plantilla de CloudFormation desplegás una VPC con subred pública e Internet Gateway, una EC2 <code>t3.micro</code> con el CloudWatch agent instalado por UserData y su config en SSM Parameter Store, publicando métricas del SO y una métrica personalizada con <code>PutMetricData</code>.</p>
+      </div>
+      <div class="cards g3">
+        <div class="card"><h3>1 · Desplegar</h3><p>Crear el stack; el agente lee su config desde SSM y arranca.</p></div>
+        <div class="card"><h3>2 · Verificar</h3><p>Comparar en CloudWatch las métricas del SO (<code>CWAgent</code>) con las del hipervisor (<code>AWS/EC2</code>).</p></div>
+        <div class="card"><h3>3 · Troubleshooting</h3><p>Con Session Manager, detener el agente y diagnosticar por qué dejan de llegar las métricas del SO.</p></div>
+      </div>
+      <p class="muted" style="margin-top:16px">Guía paso a paso: <code>laboratorio/guia.html</code> · Plantilla: <code>laboratorio/template.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- ============ 16. CIERRE ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 1</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">RESUMEN</div>
+      <h2>Lo que te llevás</h2>
+      <ul>
+        <li>La observabilidad se apoya en tres pilares (métricas, logs, trazas) y se guía con golden signals, RED/USE y SLOs.</li>
+        <li>CloudWatch organiza métricas por namespace y dimensiones; las publicás con PutMetricData o EMF y las consultás con Metrics Insights.</li>
+        <li>El hipervisor de EC2 no ve dentro del SO: el agente unificado aporta memoria, disco y logs, con su config versionada en SSM.</li>
+        <li>Próximo paso: hacer el laboratorio y pasar a la Clase 2 (logs: recolección y retención).</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+<script src="../../assets/js/slides.js"></script>
+</body>
+</html>

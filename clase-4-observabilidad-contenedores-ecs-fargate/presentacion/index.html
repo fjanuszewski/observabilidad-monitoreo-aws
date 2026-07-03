@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clase 4 · Observabilidad de contenedores (ECS + Fargate) — Observabilidad y Monitoreo en AWS</title>
+  <link rel="stylesheet" href="../../assets/css/slides.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ============ 1. PORTADA ============ -->
+  <section class="slide slide--title">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span>
+      <span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <img class="title-logo" src="../../assets/img/logo-curso.svg" alt="">
+      <div class="eyebrow">Programa de capacitación · Clase 4 de 5</div>
+      <h1>Observabilidad de contenedores (ECS + Fargate)</h1>
+      <p class="lead">Métricas, logs y trazas de cargas en contenedores: de Container Insights y FireLens a la correlación entre infraestructura, servicio y traza para el análisis de causa raíz.</p>
+      <div class="title-meta">
+        <span class="title-chip"><img src="../../assets/img/services/ecs.svg" alt="">Amazon ECS</span>
+        <span class="title-chip"><img src="../../assets/img/services/fargate.svg" alt="">AWS Fargate</span>
+        <span class="title-chip"><img src="../../assets/img/services/container-insights.svg" alt="">Container Insights</span>
+        <span class="title-chip">⏱ ~2 horas · 🧪 Laboratorio incluido</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OBJETIVOS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Objetivos</div>
+      <h2>Qué vas a lograr en esta clase</h2>
+      <ul class="checklist">
+        <li>Monitorear cargas en contenedores sobre Amazon ECS y AWS Fargate.</li>
+        <li>Recolectar métricas de clúster, servicio, tarea y contenedor con Container Insights.</li>
+        <li>Rutear los logs de contenedores a CloudWatch con el driver <code>awslogs</code> o FireLens.</li>
+        <li>Introducir APM con ADOT y CloudWatch Application Signals integrado con X-Ray.</li>
+        <li>Correlacionar infraestructura ↔ servicio ↔ traza para acelerar el diagnóstico.</li>
+        <li>Definir el clúster, el servicio Fargate y FireLens como código en CloudFormation.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 1 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 1</div>
+      <h2>Container Insights</h2>
+      <p>Métricas a nivel de clúster, servicio, tarea y contenedor; el modo estándar frente al enhanced observability y el seguimiento de despliegues.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 1 · SERVICIO: Container Insights ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/container-insights.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>CloudWatch Container Insights</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Recolecta, agrega y resume métricas y logs de cargas en contenedores. En ECS no requiere agente aparte: se habilita a nivel de clúster o de cuenta.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Niveles:</strong> métricas de clúster, servicio, tarea y contenedor.</li>
+            <li><strong>Estándar vs. enhanced:</strong> el enhanced observability suma granularidad por tarea/contenedor y más métricas.</li>
+            <li><strong>Deployment tracking:</strong> seguimiento de despliegues para ver el impacto de cada rollout.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Habilitás Container Insights en modo <strong>enhanced</strong> en el clúster ECS para ver CPU y memoria por tarea y contenedor, con dashboards curados listos para usar.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 2 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 2</div>
+      <h2>Particularidades de AWS Fargate</h2>
+      <p>Qué cambia cuando no tenés acceso al host y qué métricas quedan disponibles para las tareas.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 2 · SERVICIO: Fargate ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/fargate.svg" alt="">
+        <div>
+          <span class="cat">Compute · Serverless</span>
+          <h2>AWS Fargate</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Motor de cómputo serverless para contenedores: ejecuta tareas de ECS sin que administres ni tengas acceso a las instancias EC2 subyacentes.</p>
+          <h3>Qué cambia sin host</h3>
+          <ul>
+            <li><strong>Sin agente en el host:</strong> no instalás ni configurás el CloudWatch agent en la instancia.</li>
+            <li><strong>Alcance de las métricas:</strong> las ves a nivel de <strong>tarea y contenedor</strong>, no del SO del host.</li>
+            <li><strong>Aislamiento:</strong> cada tarea corre en su propio entorno gestionado por AWS.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>El servicio ECS corre sobre Fargate: Container Insights recolecta las métricas por tarea/contenedor sin que toques ningún host.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 3 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 3</div>
+      <h2>Logs de contenedores</h2>
+      <p>Del driver <code>awslogs</code> que envía la salida estándar a CloudWatch, a FireLens con Fluent Bit para rutear a múltiples destinos.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 3 · SERVICIO: awslogs + FireLens ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/firelens.svg" alt="">
+        <div>
+          <span class="cat">Logging · Fluent Bit</span>
+          <h2>Driver awslogs y FireLens</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Dos formas de sacar los logs de un contenedor: el driver <code>awslogs</code> los manda directo a CloudWatch Logs; FireLens es un router de logs basado en Fluent Bit.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>awslogs:</strong> envía la salida estándar del contenedor a un log group de CloudWatch.</li>
+            <li><strong>FireLens (Fluent Bit):</strong> sidecar que rutea a CloudWatch, S3, OpenSearch o terceros.</li>
+            <li><strong>Transformación:</strong> con FireLens podés filtrar, enriquecer y multiplexar destinos.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Ruteás los logs de la aplicación con un sidecar de FireLens/Fluent Bit hacia CloudWatch Logs, para correlacionarlos después con las métricas.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 4 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 4</div>
+      <h2>APM y correlación (introducción)</h2>
+      <p>ADOT como sidecar/collector, Application Signals con auto-instrumentación y X-Ray, y la correlación infraestructura ↔ servicio ↔ traza para la causa raíz.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 4 · SERVICIO: Application Signals + X-Ray ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/application-signals.svg" alt="">
+        <div>
+          <span class="cat">APM · ADOT · Application Signals · X-Ray</span>
+          <h2>APM y correlación de causa raíz</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>APM administrado que auto-instrumenta la aplicación con OpenTelemetry, publica métricas de request y se integra con AWS X-Ray para las trazas.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>ADOT:</strong> AWS Distro for OpenTelemetry corre como sidecar/collector y recolecta métricas y trazas.</li>
+            <li><strong>Auto-instrumentación:</strong> latencia, errores y throughput sin cambiar el código.</li>
+            <li><strong>X-Ray:</strong> las trazas distribuidas alimentan el mapa de servicios y los SLOs.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Junto con X-Ray, cierra el triángulo métrica–log–traza para pasar de "algo anda mal" a "esta tarea y este request son la causa".</p>
+          <span class="pill pill--orange">Introducción</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 5 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 5</div>
+      <h2>Todo como código</h2>
+      <p>El clúster ECS, el servicio Fargate con Container Insights y la configuración de FireLens, en una sola plantilla de CloudFormation.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 5 · SERVICIO: CloudFormation + ECS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Infraestructura como código</div>
+      <h2>El clúster y el servicio en CloudFormation</h2>
+      <div class="cols">
+        <div>
+          <div class="service-hero">
+            <img src="../../assets/img/services/cloudformation.svg" alt="">
+            <div><span class="cat">Recursos del stack</span><h3>Todo declarado</h3></div>
+          </div>
+          <ul>
+            <li><code>AWS::ECS::Cluster</code> con Container Insights <code>enhanced</code></li>
+            <li><code>AWS::ECS::TaskDefinition</code> (Fargate + FireLens)</li>
+            <li><code>AWS::ECS::Service</code> con la tarea desplegada</li>
+            <li><code>AWS::Logs::LogGroup</code> para los logs</li>
+            <li><code>AWS::IAM::Role</code> (task role y execution role)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="service-hero">
+            <img src="../../assets/img/services/iam.svg" alt="">
+            <div><span class="cat">Permisos mínimos</span><h3>Roles de la tarea</h3></div>
+          </div>
+          <ul>
+            <li><strong>Execution role:</strong> permite descargar la imagen y escribir en CloudWatch Logs.</li>
+            <li><strong>Task role:</strong> permisos de la app y del sidecar (FireLens/ADOT).</li>
+          </ul>
+          <div class="callout callout--info">
+            <div class="callout-title">Container Insights por IaC</div>
+            <p>Se activa con <code>ClusterSettings</code> (<code>name: containerInsights</code>, valor <code>enhanced</code>) sobre el <code>Cluster</code>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAMA DE ARQUITECTURA ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Arquitectura del laboratorio</div>
+      <h2>Cómo fluyen métricas, logs y trazas</h2>
+      <div class="arch">
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/ecs.svg" alt=""><span class="lbl">ECS + Fargate</span><span class="sub">tarea + contenedor</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/container-insights.svg" alt=""><span class="lbl">Container Insights</span><span class="sub">enhanced</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch.svg" alt=""><span class="lbl">CloudWatch</span><span class="sub">métricas + dashboards</span></div>
+        </div>
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/firelens.svg" alt=""><span class="lbl">FireLens</span><span class="sub">Fluent Bit sidecar</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch-logs.svg" alt=""><span class="lbl">CloudWatch Logs</span><span class="sub">logs del contenedor</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/xray.svg" alt=""><span class="lbl">X-Ray</span><span class="sub">trazas correlacionadas</span></div>
+        </div>
+        <p class="arch-caption">Sobre ECS/Fargate, Container Insights (enhanced) publica métricas por tarea y contenedor en CloudWatch, FireLens rutea los logs a CloudWatch Logs y las trazas llegan a X-Ray; el cruce de los tres es el que resuelve la causa raíz. Todo se despliega desde una plantilla de CloudFormation.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LABORATORIO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Manos a la obra</div>
+      <h2>Laboratorio de la clase</h2>
+      <div class="callout callout--lab">
+        <div class="callout-title">🧪 Qué vas a construir</div>
+        <p>Un clúster ECS con Container Insights (enhanced) habilitado y un servicio en Fargate con una tarea de aplicación de ejemplo, con los logs ruteados por FireLens/Fluent Bit a CloudWatch Logs. Visualizás las métricas por tarea y contenedor junto con los logs correlacionados. Todo por plantilla.</p>
+      </div>
+      <div class="cards g3">
+        <div class="card"><h3>1 · Desplegar</h3><p>Crear el stack: clúster ECS, task definition Fargate y servicio con FireLens.</p></div>
+        <div class="card"><h3>2 · Verificar</h3><p>Ver las métricas por tarea/contenedor en Container Insights y los logs en CloudWatch.</p></div>
+        <div class="card"><h3>3 · Investigar</h3><p>Forzar reinicios del contenedor y correlacionar el pico de métricas con sus logs para hallar la causa.</p></div>
+      </div>
+      <p class="muted" style="margin-top:16px">Guía paso a paso: <code>laboratorio/guia.html</code> · Plantilla: <code>laboratorio/template.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- ============ CIERRE ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 4</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">RESUMEN</div>
+      <h2>Lo que te llevás</h2>
+      <ul>
+        <li>Container Insights con métricas de clúster, servicio, tarea y contenedor, y cuándo usar el modo enhanced.</li>
+        <li>Qué cambia en Fargate al no tener host y qué métricas quedan disponibles por tarea.</li>
+        <li>El ruteo de logs con <code>awslogs</code> y con FireLens/Fluent Bit hacia CloudWatch.</li>
+        <li>La introducción a APM con ADOT, Application Signals y X-Ray, y la correlación infraestructura ↔ servicio ↔ traza.</li>
+        <li>Próximo paso: hacer el laboratorio y pasar a la Clase 5 — alertas y respuesta automatizada.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+<script src="../../assets/js/slides.js"></script>
+</body>
+</html>

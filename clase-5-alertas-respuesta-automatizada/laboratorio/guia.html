@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio · Clase 5 — Alertas, respuesta automatizada y cierre end-to-end</title>
+  <link rel="stylesheet" href="../../assets/css/guide.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+
+<header class="g-top">
+  <img src="../../assets/img/logo-curso.svg" alt="">
+  <div>
+    <div class="g-title">Laboratorio · Clase 5 — Alertas, respuesta automatizada y cierre end-to-end</div>
+    <div class="g-sub">Observabilidad y Monitoreo en AWS</div>
+  </div>
+  <span class="g-spacer"></span>
+  <span class="g-badge">CloudFormation</span>
+</header>
+
+<div class="g-wrap">
+  <!-- ---------------- SIDEBAR / TOC ---------------- -->
+  <aside class="g-side">
+    <p class="toc-title">Contenido</p>
+    <nav>
+      <a href="#intro">Introducción</a>
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#requisitos">Requisitos previos</a>
+      <a href="#desplegar">Desplegar el stack</a>
+      <a href="#verificar">Verificar en la consola</a>
+      <a href="#investigacion">Escenario de investigación</a>
+      <a href="#explorar">Explorar y experimentar</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#limpieza">Limpieza</a>
+    </nav>
+  </aside>
+
+  <!-- ---------------- CONTENIDO ---------------- -->
+  <main class="g-main">
+    <section id="intro">
+      <span class="eyebrow">Clase 5 · Laboratorio</span>
+      <h1>Alertas accionables, auto-remediación y visualización unificada</h1>
+      <p class="g-lead">Vas a cerrar el stack completo de observabilidad: alarmas de métrica, compuesta y por detección de anomalía; una regla de EventBridge que dispara un runbook de SSM Automation para auto-remediar; notificaciones por SNS; y un dashboard unificado. Después vas a simular un incidente de CPU y seguir toda la cadena de respuesta.</p>
+
+      <div class="g-meta">
+        <span class="m">⏱ <b>Duración</b>&nbsp;· 40–55 min</span>
+        <span class="m">💵 <b>Costo</b>&nbsp;· &lt; USD 1 (si limpiás al terminar)</span>
+        <span class="m">📊 <b>Nivel</b>&nbsp;· Intermedio / Avanzado</span>
+        <span class="m">🌎 <b>Región sugerida</b>&nbsp;· us-east-1</span>
+      </div>
+
+      <div class="svc-row">
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt="">CloudWatch Alarms</span>
+        <span class="svc-chip"><img src="../../assets/img/services/eventbridge.svg" alt="">EventBridge</span>
+        <span class="svc-chip"><img src="../../assets/img/services/systems-manager.svg" alt="">SSM Automation</span>
+        <span class="svc-chip"><img src="../../assets/img/services/sns.svg" alt="">SNS</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch-dashboards.svg" alt="">Dashboards</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <h2>Arquitectura</h2>
+      <p>La plantilla arma el cierre end-to-end: una instancia EC2 genera métricas; tres alarmas encadenadas detectan el incidente; y la alarma compuesta dispara <b>dos reacciones en paralelo</b> — notificar por SNS y auto-remediar vía EventBridge + SSM Automation. Todo se ve en un dashboard unificado.</p>
+      <table>
+        <thead><tr><th>Recurso</th><th>Servicio</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td>Instancia t3.micro</td><td>EC2</td><td>Host monitoreado; simula el pico de CPU</td></tr>
+          <tr><td>CloudWatch agent (config en SSM)</td><td>CloudWatch / SSM</td><td>Publica métricas del SO y logs de la app</td></tr>
+          <tr><td>Log group <code>/observabilidad/&lt;stack&gt;/app</code></td><td>CloudWatch Logs</td><td>Fuente del widget de logs y de Logs Insights</td></tr>
+          <tr><td>Alarma <code>…-cpu-alta</code></td><td>CloudWatch Alarms</td><td>Alarma de <b>métrica</b> sobre <code>CPUUtilization</code></td></tr>
+          <tr><td>Alarma <code>…-cpu-anomalia</code></td><td>CloudWatch Alarms</td><td>Alarma por <b>detección de anomalía</b> (banda dinámica)</td></tr>
+          <tr><td>Alarma <code>…-cpu-compuesta</code></td><td>CloudWatch Alarms</td><td>Alarma <b>compuesta</b> (métrica AND anomalía) → reduce ruido</td></tr>
+          <tr><td>Tópico <code>…-alertas</code> + suscripción</td><td>SNS</td><td>Notificación accionable por email</td></tr>
+          <tr><td>Runbook <code>…-remediar-cpu</code></td><td>SSM Automation</td><td>Auto-remediación: detiene la carga y deja constancia</td></tr>
+          <tr><td>Regla <code>…-alarma-a-runbook</code></td><td>EventBridge</td><td>Ante <code>ALARM</code> de la compuesta, dispara el runbook</td></tr>
+          <tr><td>Dashboard <code>…-unificado</code></td><td>CloudWatch Dashboards</td><td>Widgets de métricas, estado de alarmas y logs</td></tr>
+          <tr><td>Roles (instancia, Automation, EventBridge)</td><td>IAM</td><td>Least privilege en cada salto</td></tr>
+        </tbody>
+      </table>
+      <p><b>Flujo:</b> EC2 (CPU alta) → alarma de métrica + alarma de anomalía → alarma compuesta → <b>(a)</b> SNS → email  y  <b>(b)</b> EventBridge → SSM Automation (auto-remediación) → todo visible en el dashboard unificado.</p>
+    </section>
+
+    <section id="requisitos">
+      <h2>Requisitos previos</h2>
+      <ul>
+        <li>Cuenta de AWS con permisos para crear los recursos del laboratorio (EC2, IAM, CloudWatch, SNS, EventBridge, SSM).</li>
+        <li>Una dirección de <b>email</b> válida: SNS te mandará un correo de confirmación de la suscripción.</li>
+        <li>Acceso a la consola web de AWS (no se requiere CLI, pero se muestra la alternativa).</li>
+        <li>Como la plantilla nombra roles IAM, si desplegás por CLI necesitás <code>--capabilities CAPABILITY_NAMED_IAM</code>.</li>
+      </ul>
+      <div class="warn"><b class="t">Atención al costo</b>Todos los recursos son de bajo costo, pero recordá ejecutar la <a href="#limpieza">limpieza</a> al terminar para no dejar nada corriendo.</div>
+    </section>
+
+    <section id="desplegar">
+      <h2>Desplegar el stack</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Iniciar sesión y elegir la región</h3>
+          <p>Ingresá a la consola de AWS y seleccioná la región del laboratorio.</p>
+          <div class="console-path"><b>Consola AWS</b><span class="sep">›</span> selector de región (arriba a la derecha) <span class="sep">›</span> <b>US East (N. Virginia) us-east-1</b></div>
+        </div>
+
+        <div class="step">
+          <h3>Abrir CloudFormation y crear el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>Create stack</b> <span class="sep">›</span> With new resources</div>
+          <p>Subí el archivo <code>template.yaml</code> de esta carpeta en <b>Upload a template file</b>.</p>
+        </div>
+
+        <div class="step">
+          <h3>Nombre y parámetros</h3>
+          <p>Poné un nombre al stack (por ejemplo <code>obs-clase-5</code>) y, sobre todo, completá <b>NotificationEmail</b> con tu email. Revisá el umbral de CPU (<code>CpuAlarmThreshold</code>, 70 % por defecto).</p>
+          <div class="tip"><b class="t">Alternativa por CLI</b>Si preferís la línea de comandos:</div>
+          <div class="code">
+            <div class="code-head"><span>bash · desplegar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation deploy \
+  --stack-name obs-clase-5 \
+  --template-file template.yaml \
+  --parameter-overrides NotificationEmail=tu-email@ejemplo.com \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1</pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar y crear</h3>
+          <p>Aceptá las capacidades (IAM) y presioná <b>Submit</b>. Esperá el estado <code>CREATE_COMPLETE</code>.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack aparece en estado <b>CREATE_COMPLETE</b> y la pestaña <b>Resources</b> lista las alarmas, el tópico SNS, el runbook, la regla de EventBridge y el dashboard.</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar la suscripción de email</h3>
+          <p>SNS envía un correo de <b>AWS Notifications</b> a la dirección que pusiste. Abrilo y hacé clic en <b>Confirm subscription</b>. Sin esto no vas a recibir las alertas.</p>
+          <div class="console-path"><b>SNS</b><span class="sep">›</span> Topics <span class="sep">›</span> <b>&lt;stack&gt;-alertas</b> <span class="sep">›</span> Subscriptions</div>
+          <div class="code">
+            <div class="code-head"><span>bash · verificar la suscripción</span><button class="copy-btn">copiar</button></div>
+            <pre>aws sns list-subscriptions-by-topic \
+  --topic-arn &lt;AlertTopicArn&gt; \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La suscripción figura como <b>Confirmed</b> (no <code>PendingConfirmation</code>).</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="verificar">
+      <h2>Verificar en la consola</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>Revisar las tres alarmas</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Alarms <span class="sep">›</span> All alarms</div>
+          <p>Deben existir <code>…-cpu-alta</code> (métrica), <code>…-cpu-anomalia</code> (anomalía) y <code>…-cpu-compuesta</code> (compuesta). Recién creadas suelen estar en <code>OK</code> o <code>INSUFFICIENT_DATA</code>.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · listar alarmas</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudwatch describe-alarms \
+  --alarm-names obs-clase-5-cpu-alta obs-clase-5-cpu-anomalia obs-clase-5-cpu-compuesta \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Las tres alarmas aparecen listadas; la compuesta muestra la regla <code>ALARM(cpu-alta) AND ALARM(cpu-anomalia)</code>.</div>
+        </div>
+
+        <div class="step">
+          <h3>Abrir el dashboard unificado</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Dashboards <span class="sep">›</span> <b>&lt;stack&gt;-unificado</b></div>
+          <p>Vas a ver widgets de CPU (con banda de anomalía), memoria, estado de las alarmas y un widget de logs con las líneas de la app. El enlace directo está en el Output <code>DashboardUrl</code>.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El widget de logs muestra líneas <code>INFO heartbeat…</code> (esperá 2–3 min si aún está vacío).</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar el runbook y la regla</h3>
+          <div class="console-path"><b>Systems Manager</b><span class="sep">›</span> Documents <span class="sep">›</span> <b>&lt;stack&gt;-remediar-cpu</b></div>
+          <div class="console-path"><b>EventBridge</b><span class="sep">›</span> Rules <span class="sep">›</span> <b>&lt;stack&gt;-alarma-a-runbook</b></div>
+          <p>La regla debe estar <b>Enabled</b>, con patrón de <i>CloudWatch Alarm State Change → ALARM</i> sobre la alarma compuesta, y el runbook de SSM Automation como target.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El target de la regla es <code>automation-definition/&lt;stack&gt;-remediar-cpu</code>.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="investigacion">
+      <h2>Escenario de investigación</h2>
+      <p>Simulá un incidente de <b>alto uso de CPU</b> y seguí toda la cadena: alarma → EventBridge → runbook de SSM que remedia automáticamente; revisá el dashboard y la notificación por SNS.</p>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Provocar el incidente</h3>
+          <p>Ejecutá el script de estrés dentro de la instancia. Por consola, conectate primero por Session Manager; por CLI, disparalo con <code>send-command</code> (ver el Output <code>SimularIncidenteCommand</code>).</p>
+          <div class="console-path"><b>Systems Manager</b><span class="sep">›</span> Session Manager <span class="sep">›</span> <b>Start session</b> <span class="sep">›</span> elegí la instancia <b>obs-clase-5-ec2</b></div>
+          <div class="code">
+            <div class="code-head"><span>bash · dentro de la instancia (Session Manager)</span><button class="copy-btn">copiar</button></div>
+            <pre>/usr/local/bin/simular-incidente.sh &amp;</pre>
+          </div>
+          <div class="code">
+            <div class="code-head"><span>bash · alternativa por CLI (send-command)</span><button class="copy-btn">copiar</button></div>
+            <pre>aws ssm send-command --document-name AWS-RunShellScript \
+  --targets Key=InstanceIds,Values=&lt;InstanceId&gt; \
+  --parameters 'commands=["/usr/local/bin/simular-incidente.sh &amp;"]' \
+  --region us-east-1</pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Seguir la propagación de la alarma</h3>
+          <p>En <b>CloudWatch › Alarms</b>, mirá cómo saltan en cadena: primero <code>…-cpu-alta</code>, luego (con historia) <code>…-cpu-anomalia</code>, y cuando ambas están en <code>ALARM</code>, la <code>…-cpu-compuesta</code>.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La alarma <b>…-cpu-compuesta</b> pasa a <code>ALARM</code> (2–3 min después de iniciar la carga).</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar las dos reacciones</h3>
+          <p>La transición a <code>ALARM</code> dispara <b>en paralelo</b>: (a) el email por SNS y (b) el runbook por EventBridge.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · ver la ejecución del runbook</span><button class="copy-btn">copiar</button></div>
+            <pre>aws ssm describe-automation-executions \
+  --filters Key=DocumentNamePrefix,Values=obs-clase-5-remediar-cpu \
+  --query "AutomationExecutionMetadataList[0].[AutomationExecutionStatus,ExecutionStartTime]" \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Recibís el email de la alarma <b>y</b> hay una ejecución de Automation en estado <code>Success</code>.</div>
+        </div>
+
+        <div class="step">
+          <h3>Verificar la remediación e investigar en el dashboard</h3>
+          <p>El runbook detiene la carga (<code>pkill stress-ng</code>) y escribe <code>ACTION auto-remediacion…</code> en el log. La CPU baja, la compuesta vuelve a <code>OK</code> y SNS envía el aviso de recuperación.</p>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Logs <span class="sep">›</span> Logs Insights <span class="sep">›</span> log group <b>/observabilidad/&lt;stack&gt;/app</b></div>
+          <div class="code">
+            <div class="code-head"><span>Logs Insights · incidente y remediación</span><button class="copy-btn">copiar</button></div>
+            <pre>fields @timestamp, @message
+| filter @message like /incidente|auto-remediacion/
+| sort @timestamp desc
+| limit 50</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>En el dashboard ves el pico y su descenso; en los logs, las líneas <code>WARN incidente</code> seguidas de <code>ACTION auto-remediacion</code>.</div>
+        </div>
+
+        <div class="step">
+          <h3>Documentar el runbook operativo</h3>
+          <p>Dejá escrito, como práctica de producción, la secuencia: <b>detección</b> (alarma compuesta) → <b>notificación</b> (SNS al on-call) → <b>respuesta automática</b> (EventBridge → SSM) → <b>verificación</b> (dashboard + Logs Insights) → <b>escalamiento</b> si no baja → <b>post-incidente</b> (revisar umbrales y el <code>AND</code> de la compuesta).</p>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="explorar">
+      <h2>Explorar y experimentar</h2>
+      <p>Ideas para profundizar y entender el comportamiento de los servicios.</p>
+      <ul>
+        <li>Cambiá el <code>AlarmRule</code> de la compuesta de <code>AND</code> a <code>OR</code> y compará la latencia de detección contra el ruido.</li>
+        <li>Bajá <code>CpuAlarmThreshold</code> (por ejemplo a 40 %) y observá cómo dispara antes.</li>
+        <li>Ampliá o achicá la banda de anomalía cambiando el <code>2</code> en <code>ANOMALY_DETECTION_BAND(m1, 2)</code>.</li>
+        <li>Sumá un segundo target a EventBridge: además del runbook, notificá a Slack/PagerDuty vía SNS, Lambda o AWS Chatbot.</li>
+        <li>Extendé el runbook con un paso <code>aws:changeInstanceState</code> para una remediación más agresiva (reinicio de la instancia).</li>
+      </ul>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <p>Problemas frecuentes y cómo resolverlos. El detalle completo está en <a href="./troubleshooting.md">troubleshooting.md</a>.</p>
+      <div class="trouble">
+        <details>
+          <summary>No llega el email de las alarmas</summary>
+          <p><span class="sym">Síntoma:</span> la alarma pasa a ALARM pero no recibís nada.</p>
+          <p><span class="fix">Solución:</span> la suscripción SNS quedó <code>PendingConfirmation</code>. Revisá spam, abrí el email de AWS Notifications y hacé clic en <b>Confirm subscription</b>.</p>
+        </details>
+        <details>
+          <summary>La alarma compuesta no pasa a ALARM aunque la CPU está alta</summary>
+          <p><span class="sym">Síntoma:</span> <code>…-cpu-alta</code> está en ALARM pero la compuesta sigue en OK.</p>
+          <p><span class="fix">Solución:</span> la regla es <code>AND</code> con la de anomalía, que necesita historia para entrenar la banda. Es intencional (reduce ruido). Para forzarla, cambiá el <code>AlarmRule</code> a solo la de métrica.</p>
+        </details>
+        <details>
+          <summary>El runbook no se ejecuta al saltar la alarma</summary>
+          <p><span class="sym">Síntoma:</span> la compuesta está en ALARM pero no hay ejecución de Automation.</p>
+          <p><span class="fix">Solución:</span> la regla apunta al ARN de la <b>compuesta</b>; verificá que esa fue la que saltó y que la instancia figure como <i>Managed</i> en SSM Fleet Manager.</p>
+        </details>
+        <details>
+          <summary>El widget de logs del dashboard aparece vacío</summary>
+          <p><span class="sym">Síntoma:</span> el widget de tipo log no muestra filas.</p>
+          <p><span class="fix">Solución:</span> esperá 2–3 min a que el agente empiece a enviar <code>/var/log/obs-app.log</code>; el cron de latido escribe una línea por minuto.</p>
+        </details>
+        <details>
+          <summary>El stack queda en ROLLBACK_COMPLETE</summary>
+          <p><span class="sym">Síntoma:</span> la creación falla y el stack se revierte.</p>
+          <p><span class="fix">Solución:</span> email inválido en <code>NotificationEmail</code> o falta <code>CAPABILITY_NAMED_IAM</code>. Abrí <b>Events</b>, buscá el primer error (arriba del rollback) y corregí.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="limpieza">
+      <h2>Limpieza</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>Eliminar el stack</h3>
+          <p>La plantilla no usa <code>DeletionPolicy: Retain</code>, así que borrar el stack elimina todo (incluidas las alarmas, el tópico SNS, el runbook, la regla de EventBridge, el dashboard y el log group). No hay bucket S3 que vaciar en este lab.</p>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>obs-clase-5</b> <span class="sep">›</span> Delete</div>
+          <div class="code">
+            <div class="code-head"><span>bash · eliminar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation delete-stack --stack-name obs-clase-5 --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack desaparece de la lista (estado <b>DELETE_COMPLETE</b>). No quedan recursos facturables.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="g-nav">
+      <a href="../presentacion/index.html">← Ver la presentación</a>
+      <a href="../../README.md">Índice del curso →</a>
+    </div>
+
+    <footer class="g-foot">Observabilidad y Monitoreo en AWS · Clase 5 · Laboratorio</footer>
+  </main>
+</div>
+
+<script src="../../assets/js/guide.js"></script>
+</body>
+</html>

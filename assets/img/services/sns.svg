@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Amazon SNS">
+  <defs>
+    <linearGradient id="grad_sns" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2E73B8"/>
+      <stop offset="1" stop-color="#215284"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_sns)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <circle cx="10" cy="20" r="3.5" fill="#fff"/><circle cx="31" cy="9" r="3" fill="#fff"/><circle cx="33" cy="20" r="3" fill="#fff"/><circle cx="31" cy="31" r="3" fill="#fff"/><line x1="12" y1="18" x2="29" y2="10"/><line x1="14" y1="20" x2="30" y2="20"/><line x1="12" y1="22" x2="29" y2="30"/>
+  </g>
+</svg>

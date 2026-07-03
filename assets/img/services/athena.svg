@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Amazon Athena">
+  <defs>
+    <linearGradient id="grad_athena" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7A3FF2"/>
+      <stop offset="1" stop-color="#572dae"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_athena)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <rect x="9" y="6" width="22" height="4" rx="1"/><rect x="9" y="31" width="22" height="4" rx="1"/><line x1="14" y1="10" x2="14" y2="31"/><line x1="20" y1="10" x2="20" y2="31"/><line x1="26" y1="10" x2="26" y2="31"/>
+  </g>
+</svg>

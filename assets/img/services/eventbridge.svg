@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Amazon EventBridge">
+  <defs>
+    <linearGradient id="grad_eventbridge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2E73B8"/>
+      <stop offset="1" stop-color="#215284"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_eventbridge)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <path d="M22 4 L9 23 L18 23 L16 36 L31 15 L21 15 Z" fill="#fff" stroke="none"/>
+  </g>
+</svg>

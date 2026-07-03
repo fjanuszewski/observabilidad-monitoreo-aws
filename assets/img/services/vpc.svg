@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Amazon VPC">
+  <defs>
+    <linearGradient id="grad_vpc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B34C4"/>
+      <stop offset="1" stop-color="#41258d"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_vpc)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <rect x="4" y="8" width="32" height="24" rx="4" stroke-dasharray="4 3"/><rect x="9" y="15" width="9" height="9" rx="1"/><rect x="22" y="15" width="9" height="9" rx="1"/><line x1="18" y1="19" x2="22" y2="19"/>
+  </g>
+</svg>

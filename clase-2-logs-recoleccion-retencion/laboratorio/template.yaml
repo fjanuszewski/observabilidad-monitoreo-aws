@@ -1,0 +1,480 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+# ============================================================================
+# Clase 2 — Logs: recolección, lectura y retención
+# Laboratorio: pipeline de logs de una app en EC2 hacia CloudWatch Logs.
+#
+# Qué despliega este stack:
+#   - Instancia EC2 (t3.micro) con el agente unificado de CloudWatch, que
+#     genera una app de ejemplo y envía sus logs a un log group.
+#   - Log group con RETENCIÓN definida (rotación lógica en la nube) y,
+#     opcionalmente, cifrado con una KMS key gestionada por el cliente.
+#   - Metric filter que cuenta líneas ERROR (con DefaultValue=0 para publicar
+#     ceros cuando no hay coincidencias).
+#   - Alarma de CloudWatch sobre esa métrica.
+#   - QueryDefinition: consulta de Logs Insights guardada.
+#   - Topic SNS opcional para notificar cuando la alarma pasa a ALARM.
+#
+# Diseño de bajo costo: t3.micro, disco gp3 chico, single-AZ, todo borrable.
+# Costo objetivo del laboratorio: < USD 1 (si limpiás al terminar).
+# ============================================================================
+
+Description: >-
+  Observabilidad y Monitoreo en AWS - Clase 2. Pipeline de logs: EC2 + agente
+  de CloudWatch -> Log group con retencion -> Metric filter de ERROR -> Alarma
+  -> SNS (opcional). Incluye QueryDefinition de Logs Insights y cifrado KMS
+  opcional. Bajo costo y borrable.
+
+# ----------------------------------------------------------------------------
+# Metadata: agrupa y ordena los parámetros en la consola de CloudFormation.
+# ----------------------------------------------------------------------------
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Cómputo (generador de logs)
+        Parameters:
+          - LatestAmiId
+          - InstanceType
+          - VolumeSize
+      - Label:
+          default: Log group y retención
+        Parameters:
+          - LogGroupName
+          - RetentionInDays
+          - LogGroupClass
+      - Label:
+          default: Metric filter y alarma
+        Parameters:
+          - ErrorThreshold
+      - Label:
+          default: Protección y notificaciones (opcional)
+        Parameters:
+          - EnableKmsEncryption
+          - NotificationEmail
+    ParameterLabels:
+      LatestAmiId:
+        default: AMI (Amazon Linux 2023) vía SSM
+      InstanceType:
+        default: Tipo de instancia EC2
+      VolumeSize:
+        default: Tamaño del disco raíz (GiB)
+      LogGroupName:
+        default: Nombre del log group
+      RetentionInDays:
+        default: Retención (días)
+      LogGroupClass:
+        default: Clase de log group
+      ErrorThreshold:
+        default: Umbral de errores para la alarma
+      EnableKmsEncryption:
+        default: Cifrar el log group con KMS
+      NotificationEmail:
+        default: Email para notificaciones SNS
+
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+Parameters:
+
+  # AMI resuelta por SSM: nunca hardcodeamos IDs de imagen.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Parámetro SSM que resuelve la última AMI de Amazon Linux 2023.
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+    Description: Tipo de instancia. t3.micro es suficiente para el laboratorio.
+
+  VolumeSize:
+    Type: Number
+    Default: 8
+    MinValue: 8
+    MaxValue: 20
+    Description: Tamaño del disco raíz gp3 en GiB.
+
+  LogGroupName:
+    Type: String
+    Default: /obs/clase-2/app
+    Description: Nombre del log group donde la app publica sus logs.
+    AllowedPattern: "^[A-Za-z0-9._/#-]+$"
+
+  # Valores discretos permitidos por CloudWatch Logs (1 día a 10 años).
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    AllowedValues:
+      - 1
+      - 3
+      - 5
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+      - 120
+      - 150
+      - 180
+      - 365
+      - 400
+      - 545
+      - 731
+      - 1096
+      - 1827
+      - 2192
+      - 2557
+      - 2922
+      - 3288
+      - 3653
+    Description: Política de retención del log group (la rotación lógica en la nube).
+
+  LogGroupClass:
+    Type: String
+    Default: STANDARD
+    AllowedValues:
+      - STANDARD
+      - INFREQUENT_ACCESS
+    Description: >-
+      STANDARD habilita Live Tail, metric filters y subscription filters.
+      INFREQUENT_ACCESS abarata la ingestión pero solo permite Logs Insights.
+
+  ErrorThreshold:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: Cantidad de errores en el período que dispara la alarma.
+
+  EnableKmsEncryption:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Si es true, crea una KMS key y cifra el log group en reposo.
+
+  NotificationEmail:
+    Type: String
+    Default: ""
+    Description: >-
+      Email para recibir la notificación SNS al dispararse la alarma.
+      Dejar vacío para no crear el topic ni la suscripción.
+    AllowedPattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+
+# ----------------------------------------------------------------------------
+# Conditions
+# ----------------------------------------------------------------------------
+Conditions:
+  # Solo se puede usar metric filter si el log group es STANDARD.
+  IsStandardClass: !Equals [!Ref LogGroupClass, "STANDARD"]
+  # Cifrado KMS opcional.
+  UseKms: !Equals [!Ref EnableKmsEncryption, "true"]
+  # El topic SNS y su suscripción solo se crean si hay email.
+  HasEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
+  # La alarma solo tiene sentido con log group STANDARD (metric filter).
+  CreateAlarm: !Condition IsStandardClass
+  # La acción de alarma via SNS requiere email y clase STANDARD.
+  AlarmActionEnabled: !And
+    - !Condition IsStandardClass
+    - !Condition HasEmail
+
+# ----------------------------------------------------------------------------
+# Resources
+# ----------------------------------------------------------------------------
+Resources:
+
+  # --- KMS: clave gestionada por el cliente para cifrar el log group ---------
+  # La key policy autoriza al servicio de logs de la región a usar la clave,
+  # acotado por SourceArn al log group específico (menor privilegio).
+  LogsKmsKey:
+    Type: AWS::KMS::Key
+    Condition: UseKms
+    Properties:
+      Description: Clave para cifrar el log group del laboratorio de la Clase 2.
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableRootAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: "*"
+          - Sid: AllowCloudWatchLogs
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "2"
+
+  # Alias legible para la KMS key.
+  LogsKmsAlias:
+    Type: AWS::KMS::Alias
+    Condition: UseKms
+    Properties:
+      AliasName: !Sub alias/obs-clase-2-logs-${AWS::StackName}
+      TargetKeyId: !Ref LogsKmsKey
+
+  # --- Log group: destino central de los logs con retención definida ---------
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    # Borrable: sin DeletionPolicy: Retain (se elimina con el stack).
+    Properties:
+      LogGroupName: !Ref LogGroupName
+      RetentionInDays: !Ref RetentionInDays
+      LogGroupClass: !Ref LogGroupClass
+      KmsKeyId: !If [UseKms, !GetAtt LogsKmsKey.Arn, !Ref AWS::NoValue]
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "2"
+
+  # --- Metric filter: cuenta líneas ERROR y publica una métrica --------------
+  # DefaultValue: 0 hace que la métrica publique ceros cuando no hay ERROR,
+  # así la alarma no queda atascada en INSUFFICIENT_DATA.
+  ErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Condition: IsStandardClass
+    Properties:
+      LogGroupName: !Ref AppLogGroup
+      FilterName: contar-errores
+      # Patrón sin estructura: matchea el término ERROR en cualquier línea.
+      FilterPattern: "ERROR"
+      MetricTransformations:
+        - MetricName: AppErrorCount
+          MetricNamespace: Obs/Clase2
+          MetricValue: "1"
+          DefaultValue: 0
+          Unit: Count
+
+  # --- Topic SNS opcional para notificar el disparo de la alarma -------------
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasEmail
+    Properties:
+      TopicName: !Sub obs-clase-2-alarmas-${AWS::StackName}
+      DisplayName: Alarmas Clase 2 - Logs
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "2"
+
+  # Suscripción por email: llega un correo de confirmación a validar.
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  # --- Alarma sobre la métrica del metric filter -----------------------------
+  # Statistic=Sum cuenta ocurrencias; treatMissingData=notBreaching evita
+  # falsos disparos por puntos faltantes.
+  ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateAlarm
+    Properties:
+      AlarmName: !Sub obs-clase-2-errores-${AWS::StackName}
+      AlarmDescription: >-
+        Se dispara cuando la app en EC2 registra errores (líneas ERROR) por
+        encima del umbral en el período de evaluación.
+      Namespace: Obs/Clase2
+      MetricName: AppErrorCount
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: !Ref ErrorThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !If [AlarmActionEnabled, !Ref AlarmTopic, !Ref AWS::NoValue]
+      OKActions:
+        - !If [AlarmActionEnabled, !Ref AlarmTopic, !Ref AWS::NoValue]
+
+  # --- QueryDefinition: consulta de Logs Insights guardada -------------------
+  ErrorsQuery:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: Obs-Clase2/Errores-por-periodo
+      LogGroupNames:
+        - !Ref AppLogGroup
+      QueryString: |
+        fields @timestamp, @message
+        | filter @message like /ERROR/
+        | sort @timestamp desc
+        | limit 100
+
+  # --- IAM: rol de la instancia EC2 con permisos mínimos ---------------------
+  # CloudWatchAgentServerPolicy cubre logs:CreateLogStream/PutLogEvents del
+  # agente; AmazonSSMManagedInstanceCore habilita Session Manager (sin SSH).
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub obs-clase-2-ec2-role-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "2"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # --- Instancia EC2: genera la app y envía logs con el agente ---------------
+  # Se lanza en la VPC por defecto de la cuenta con su SG por defecto (sin
+  # ingress abierto). El acceso, si hace falta, es por Session Manager (SSM),
+  # así el laboratorio no depende de crear una VPC ni de abrir puertos.
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: !Ref VolumeSize
+            DeleteOnTermination: true
+            Encrypted: true
+      # UserData: instala el agente de CloudWatch, escribe su config apuntando
+      # al log group, y arranca un generador de logs de ejemplo.
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          # 1) Instalar el agente unificado de CloudWatch.
+          dnf install -y amazon-cloudwatch-agent
+
+          # 2) Config del agente: recolecta el log de la app y lo manda al log group.
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json <<'CWCFG'
+          {
+            "logs": {
+              "logs_collected": {
+                "files": {
+                  "collect_list": [
+                    {
+                      "file_path": "/var/log/app/app.log",
+                      "log_group_name": "${LogGroupName}",
+                      "log_stream_name": "{instance_id}/app",
+                      "retention_in_days": ${RetentionInDays}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+          CWCFG
+
+          # 3) Arrancar el agente con esa config.
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+            -a fetch-config -m ec2 -s \
+            -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
+
+          # 4) App de ejemplo: escribe una línea INFO cada 15s y una ERROR
+          #    cada ~2 min, para tener datos con qué disparar la alarma.
+          mkdir -p /var/log/app
+          cat > /usr/local/bin/app-logger.sh <<'APP'
+          #!/bin/bash
+          i=0
+          while true; do
+            i=$((i+1))
+            echo "$(date -u +%FT%TZ) INFO  request id=$i status=200 latency=42ms" >> /var/log/app/app.log
+            if [ $((i % 8)) -eq 0 ]; then
+              echo "$(date -u +%FT%TZ) ERROR request id=$i status=500 msg='db timeout'" >> /var/log/app/app.log
+            fi
+            sleep 15
+          done
+          APP
+          chmod +x /usr/local/bin/app-logger.sh
+
+          # 5) Servicio systemd para que la app corra en background.
+          cat > /etc/systemd/system/app-logger.service <<'SVC'
+          [Unit]
+          Description=App de ejemplo que genera logs
+          After=network.target
+          [Service]
+          ExecStart=/usr/local/bin/app-logger.sh
+          Restart=always
+          [Install]
+          WantedBy=multi-user.target
+          SVC
+          systemctl daemon-reload
+          systemctl enable --now app-logger.service
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "2"
+        - Key: Name
+          Value: !Sub obs-clase-2-app-${AWS::StackName}
+
+# ----------------------------------------------------------------------------
+# Outputs: nombres de recursos y comandos de verificación.
+# ----------------------------------------------------------------------------
+Outputs:
+
+  LogGroupNameOut:
+    Description: Nombre del log group donde la app publica sus logs.
+    Value: !Ref AppLogGroup
+
+  InstanceId:
+    Description: ID de la instancia EC2 generadora de logs.
+    Value: !Ref AppInstance
+
+  AlarmNameOut:
+    Condition: CreateAlarm
+    Description: Nombre de la alarma de errores.
+    Value: !Ref ErrorAlarm
+
+  SavedQueryName:
+    Description: Nombre de la consulta guardada de Logs Insights.
+    Value: Obs-Clase2/Errores-por-periodo
+
+  TailLogsCommand:
+    Description: Comando CLI para ver los logs en vivo (Live Tail simplificado).
+    Value: !Sub aws logs tail ${LogGroupName} --follow --region ${AWS::Region}
+
+  DescribeAlarmCommand:
+    Condition: CreateAlarm
+    Description: Comando CLI para ver el estado de la alarma.
+    Value: !Sub aws cloudwatch describe-alarms --alarm-names obs-clase-2-errores-${AWS::StackName} --region ${AWS::Region}
+
+  SsmSessionCommand:
+    Description: Comando para abrir una sesión SSM en la instancia (sin SSH).
+    Value: !Sub aws ssm start-session --target ${AppInstance} --region ${AWS::Region}

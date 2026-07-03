@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "NombrePrefijo",
+    "ParameterValue": "obs-clase4"
+  },
+  {
+    "ParameterKey": "CidrVpc",
+    "ParameterValue": "10.40.0.0/16"
+  },
+  {
+    "ParameterKey": "CidrSubred",
+    "ParameterValue": "10.40.1.0/24"
+  },
+  {
+    "ParameterKey": "ImagenApp",
+    "ParameterValue": "public.ecr.aws/docker/library/httpd:2.4"
+  },
+  {
+    "ParameterKey": "ImagenFluentBit",
+    "ParameterValue": "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable"
+  },
+  {
+    "ParameterKey": "DiasRetencionLogs",
+    "ParameterValue": "3"
+  }
+]

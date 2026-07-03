@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plantilla de presentación — Observabilidad y Monitoreo en AWS</title>
+  <link rel="stylesheet" href="../../assets/css/slides.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+<!--
+  ============================================================================
+  PLANTILLA DE PRESENTACIÓN (gold standard). Copiar esta estructura en
+  clase-N/presentacion/index.html y reemplazar el contenido.
+  Reglas:
+   - Los estilos vienen SOLO de ../../assets/css/slides.css (no CSS inline).
+   - Rutas a íconos: ../../assets/img/services/<slug>.svg
+   - Cada .slide comienza con la barra .slide-top (marca + clase). El contador
+     lo inyecta slides.js automáticamente.
+   - Tipos de slide: --title, --section, --service, y contenido normal.
+   - No sobrecargar: máx ~6 bullets o ~3 cards por slide para que no desborde.
+  ============================================================================
+-->
+<div class="deck">
+
+  <!-- ============ 1. PORTADA ============ -->
+  <section class="slide slide--title">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span>
+      <span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <img class="title-logo" src="../../assets/img/logo-curso.svg" alt="">
+      <div class="eyebrow">Programa de capacitación · Clase N de 5</div>
+      <h1>Título de la clase</h1>
+      <p class="lead">Bajada breve que resume el foco de la clase en una frase.</p>
+      <div class="title-meta">
+        <span class="title-chip"><img src="../../assets/img/services/cloudwatch.svg" alt="">Amazon CloudWatch</span>
+        <span class="title-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+        <span class="title-chip">⏱ ~2 horas · 🧪 Laboratorio incluido</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OBJETIVOS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Objetivos</div>
+      <h2>Qué vas a lograr en esta clase</h2>
+      <ul class="checklist">
+        <li>Objetivo de aprendizaje uno, accionable y concreto.</li>
+        <li>Objetivo dos, ligado a un servicio o técnica.</li>
+        <li>Objetivo tres.</li>
+        <li>Objetivo cuatro: desplegar/operar algo real con CloudFormation.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 3. DIVISOR DE SECCIÓN / MÓDULO ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 1</div>
+      <h2>Nombre del módulo</h2>
+      <p>Una línea que enmarca de qué trata este bloque.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4. PANORAMA DE SERVICIOS (grid de tiles) ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Panorama</div>
+      <h2>Servicios que vas a usar</h2>
+      <div class="svc-grid">
+        <div class="svc-tile"><img src="../../assets/img/services/cloudwatch.svg" alt=""><span class="n">CloudWatch</span><span class="d">Métricas, alarmas y dashboards</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/ec2.svg" alt=""><span class="n">Amazon EC2</span><span class="d">Cómputo a monitorear</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/cloudformation.svg" alt=""><span class="n">CloudFormation</span><span class="d">Infra como código</span></div>
+        <div class="svc-tile"><img src="../../assets/img/services/systems-manager.svg" alt=""><span class="n">Systems Manager</span><span class="d">Config del agente</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. SERVICIO EN DETALLE ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudwatch.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>Amazon CloudWatch</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Explicación en 2–3 frases de para qué sirve y cuándo se usa.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Concepto A:</strong> definición corta.</li>
+            <li><strong>Concepto B:</strong> definición corta.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Cómo encaja este servicio en el laboratorio de la clase.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. DIAGRAMA DE ARQUITECTURA (flow con nodos) ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Arquitectura del laboratorio</div>
+      <h2>Cómo fluyen los datos</h2>
+      <div class="arch">
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/ec2.svg" alt=""><span class="lbl">EC2 + Agent</span><span class="sub">métricas del SO</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch.svg" alt=""><span class="lbl">CloudWatch</span><span class="sub">métricas</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt=""><span class="lbl">Alarma</span><span class="sub">umbral</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/sns.svg" alt=""><span class="lbl">SNS</span><span class="sub">notifica</span></div>
+        </div>
+        <p class="arch-caption">Flujo de extremo a extremo del laboratorio de esta clase.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. CONTENIDO 2 COLUMNAS + CALLOUT ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Concepto</div>
+      <h2>Título del concepto</h2>
+      <div class="cols">
+        <div>
+          <p>Explicación del concepto con foco práctico.</p>
+          <ul>
+            <li>Punto uno.</li>
+            <li>Punto dos.</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code">
+            <pre><span class="c"># ejemplo de CLI o snippet CFN</span>
+aws cloudwatch put-metric-data \
+  --namespace <span class="s">"Curso/Obs"</span> \
+  --metric-name <span class="s">"Requests"</span> \
+  --value <span class="s">1</span></pre>
+          </div>
+          <div class="callout callout--tip">
+            <div class="callout-title">Buena práctica</div>
+            <p>Un consejo accionable relacionado al concepto.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. SLIDE DE LABORATORIO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Manos a la obra</div>
+      <h2>Laboratorio de la clase</h2>
+      <div class="callout callout--lab">
+        <div class="callout-title">🧪 Qué vas a construir</div>
+        <p>Descripción del entregable del laboratorio en 2–3 frases, con los recursos principales que despliega el CloudFormation.</p>
+      </div>
+      <div class="cards g3">
+        <div class="card"><h3>1 · Desplegar</h3><p>Crear el stack con la plantilla.</p></div>
+        <div class="card"><h3>2 · Verificar</h3><p>Comprobar en la consola que todo funciona.</p></div>
+        <div class="card"><h3>3 · Troubleshooting</h3><p>Romper y reparar para explorar los servicios.</p></div>
+      </div>
+      <p class="muted" style="margin-top:16px">Guía paso a paso: <code>laboratorio/guia.html</code> · Plantilla: <code>laboratorio/template.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- ============ 9. CIERRE ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase N</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">RESUMEN</div>
+      <h2>Lo que te llevás</h2>
+      <ul>
+        <li>Idea clave uno.</li>
+        <li>Idea clave dos.</li>
+        <li>Próximo paso: hacer el laboratorio y pasar a la Clase N+1.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+<script src="../../assets/js/slides.js"></script>
+</body>
+</html>

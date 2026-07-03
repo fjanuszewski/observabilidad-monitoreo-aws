@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "NombrePrefijo",
+    "ParameterValue": "obs-clase3"
+  },
+  {
+    "ParameterKey": "DiasHastaGlacier",
+    "ParameterValue": "30"
+  },
+  {
+    "ParameterKey": "DiasRetencionLogGroup",
+    "ParameterValue": "1"
+  }
+]

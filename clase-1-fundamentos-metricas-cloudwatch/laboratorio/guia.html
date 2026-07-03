@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio · Clase 1 — Fundamentos, métricas y monitoreo de EC2 con CloudWatch</title>
+  <link rel="stylesheet" href="../../assets/css/guide.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+
+<header class="g-top">
+  <img src="../../assets/img/logo-curso.svg" alt="">
+  <div>
+    <div class="g-title">Laboratorio · Clase 1 — Fundamentos, métricas y monitoreo de EC2 con CloudWatch</div>
+    <div class="g-sub">Observabilidad y Monitoreo en AWS</div>
+  </div>
+  <span class="g-spacer"></span>
+  <span class="g-badge">CloudFormation</span>
+</header>
+
+<div class="g-wrap">
+  <!-- ---------------- SIDEBAR / TOC ---------------- -->
+  <aside class="g-side">
+    <p class="toc-title">Contenido</p>
+    <nav>
+      <a href="#intro">Introducción</a>
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#requisitos">Requisitos previos</a>
+      <a href="#desplegar">Desplegar el stack</a>
+      <a href="#verificar">Verificar en la consola</a>
+      <a href="#explorar">Explorar y experimentar</a>
+      <a href="#investigacion">Escenario de investigación</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#limpieza">Limpieza</a>
+    </nav>
+  </aside>
+
+  <!-- ---------------- CONTENIDO ---------------- -->
+  <main class="g-main">
+    <section id="intro">
+      <span class="eyebrow">Clase 1 · Laboratorio</span>
+      <h1>Fundamentos, métricas y monitoreo de EC2 con CloudWatch</h1>
+      <p class="g-lead">Vas a desplegar con CloudFormation la base del entorno de observabilidad: una VPC con subred pública y una instancia EC2 t3.micro que instala el <b>CloudWatch agent</b> (con su configuración versionada en SSM Parameter Store), publica métricas del sistema operativo y una métrica personalizada con <code>PutMetricData</code>. Después vas a verificar los datos en CloudWatch y a diagnosticar, por SSM Session Manager, por qué dejan de llegar métricas cuando el agente se detiene.</p>
+
+      <div class="g-meta">
+        <span class="m">⏱ <b>Duración</b>&nbsp;· 40–55 min</span>
+        <span class="m">💵 <b>Costo</b>&nbsp;· &lt; USD 1 (si limpiás al terminar)</span>
+        <span class="m">📊 <b>Nivel</b>&nbsp;· Intermedio</span>
+        <span class="m">🌎 <b>Región sugerida</b>&nbsp;· us-east-1</span>
+      </div>
+
+      <div class="svc-row">
+        <span class="svc-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+        <span class="svc-chip"><img src="../../assets/img/services/vpc.svg" alt="">VPC</span>
+        <span class="svc-chip"><img src="../../assets/img/services/ec2.svg" alt="">EC2</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch.svg" alt="">CloudWatch</span>
+        <span class="svc-chip"><img src="../../assets/img/services/systems-manager.svg" alt="">Systems Manager</span>
+        <span class="svc-chip"><img src="../../assets/img/services/iam.svg" alt="">IAM</span>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <h2>Arquitectura</h2>
+      <p>La plantilla <code>template.yaml</code> despliega todo el entorno como un único stack. La instancia expone dos rutas de métricas hacia CloudWatch: las del <b>hipervisor</b> (namespace <code>AWS/EC2</code>, sin agente) y las del <b>sistema operativo</b> (namespace <code>CWAgent</code>, publicadas por el agente), más una métrica personalizada enviada con <code>PutMetricData</code>.</p>
+      <table>
+        <thead><tr><th>Recurso</th><th>Servicio</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td>VPC + subred pública + IGW</td><td>VPC</td><td>Red con salida a internet para el agente y SSM</td></tr>
+          <tr><td>IAM Role + Instance Profile</td><td>IAM</td><td>Permisos sin credenciales estáticas (CloudWatchAgentServerPolicy + AmazonSSMManagedInstanceCore)</td></tr>
+          <tr><td>Parámetro con la config JSON</td><td>SSM Parameter Store</td><td>Configuración versionada del CloudWatch agent</td></tr>
+          <tr><td>Instancia t3.micro</td><td>EC2</td><td>Host monitoreado; UserData instala y arranca el agente</td></tr>
+          <tr><td>Namespaces CWAgent / Curso/Obs</td><td>CloudWatch</td><td>Reciben métricas del SO y la métrica personalizada</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="requisitos">
+      <h2>Requisitos previos</h2>
+      <ul>
+        <li>Cuenta de AWS con permisos para crear VPC, EC2, IAM, SSM y CloudWatch.</li>
+        <li>Acceso a la consola web de AWS. No se requiere CLI, pero se muestra la alternativa en cada paso.</li>
+        <li>Para la vía CLI: <code>aws-cli</code> configurado (<code>aws configure</code>) con credenciales de la cuenta.</li>
+        <li>El stack crea un rol IAM con nombre generado, así que al desplegar hay que aceptar la capacidad <code>CAPABILITY_IAM</code>.</li>
+      </ul>
+      <div class="warn"><b class="t">Atención al costo</b>Todos los recursos son de bajo costo (t3.micro, disco gp3 de 8&nbsp;GiB, single-AZ), pero recordá ejecutar la <a href="#limpieza">limpieza</a> al terminar para no dejar la instancia corriendo.</div>
+    </section>
+
+    <section id="desplegar">
+      <h2>Desplegar el stack</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Iniciar sesión y elegir la región</h3>
+          <p>Ingresá a la consola de AWS y seleccioná la región del laboratorio.</p>
+          <div class="console-path"><b>Consola AWS</b><span class="sep">›</span> selector de región (arriba a la derecha) <span class="sep">›</span> <b>US East (N. Virginia) us-east-1</b></div>
+        </div>
+
+        <div class="step">
+          <h3>Abrir CloudFormation y crear el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>Create stack</b> <span class="sep">›</span> With new resources (standard)</div>
+          <p>En <b>Specify template</b> elegí <b>Upload a template file</b> y subí el archivo <code>template.yaml</code> de esta carpeta.</p>
+        </div>
+
+        <div class="step">
+          <h3>Nombre y parámetros</h3>
+          <p>Poné un nombre al stack (por ejemplo <code>obs-clase-1</code>). Los parámetros ya traen defaults de bajo costo; podés dejarlos como están. La AMI se resuelve automáticamente desde SSM, no hay que elegir un ID.</p>
+          <div class="tip"><b class="t">Alternativa por CLI</b>Desplegá el stack completo con un solo comando (desde esta carpeta):</div>
+          <div class="code">
+            <div class="code-head"><span>bash · desplegar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation deploy \
+  --stack-name obs-clase-1 \
+  --template-file template.yaml \
+  --parameter-overrides file://parameters.example.json \
+  --capabilities CAPABILITY_IAM \
+  --region us-east-1</pre>
+          </div>
+          <div class="tip"><b class="t">Nota</b><code>deploy</code> acepta los parámetros con <code>--parameter-overrides Key=Value</code>; el archivo <code>parameters.example.json</code> también sirve tal cual con <code>create-stack</code> usando <code>--parameters file://parameters.example.json</code>.</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar y crear</h3>
+          <p>En la última pantalla marcá <b>I acknowledge that AWS CloudFormation might create IAM resources</b> y presioná <b>Submit</b>. Esperá el estado <code>CREATE_COMPLETE</code> (2–4 minutos).</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack aparece en <b>CREATE_COMPLETE</b> y la pestaña <b>Resources</b> lista la VPC, la subred, el IGW, el rol IAM, el parámetro SSM y la instancia EC2.</div>
+        </div>
+
+        <div class="step">
+          <h3>Anotar los Outputs</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>obs-clase-1</b> <span class="sep">›</span> Outputs</div>
+          <p>Copiá el <code>InstanceId</code> y los comandos de verificación (<code>ListSoMetricsCommand</code>, <code>SessionManagerCommand</code>). Los vas a usar en las secciones siguientes.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="verificar">
+      <h2>Verificar en la consola</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Esperar a que el agente publique</h3>
+          <p>Tras <code>CREATE_COMPLETE</code>, el UserData instala y arranca el agente. Las primeras métricas del SO tardan unos 3–5 minutos en aparecer.</p>
+        </div>
+
+        <div class="step">
+          <h3>Ver las métricas del sistema operativo (CWAgent)</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Metrics <span class="sep">›</span> All metrics <span class="sep">›</span> <b>CWAgent</b> <span class="sep">›</span> InstanceId</div>
+          <p>Confirmá que aparecen <code>mem_used_percent</code> y <code>disk_used_percent</code> con datos para tu <code>InstanceId</code>.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · listar métricas del SO por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudwatch list-metrics \
+  --namespace CWAgent \
+  --dimensions Name=InstanceId,Value=&lt;INSTANCE_ID&gt; \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El namespace <b>CWAgent</b> muestra <code>mem_used_percent</code> y <code>disk_used_percent</code> con puntos de datos.</div>
+        </div>
+
+        <div class="step">
+          <h3>Ver las métricas del hipervisor (AWS/EC2)</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Metrics <span class="sep">›</span> All metrics <span class="sep">›</span> <b>EC2</b> <span class="sep">›</span> Per-Instance Metrics</div>
+          <p>Buscá <code>CPUUtilization</code> para tu instancia. Estas métricas las emite EC2 sin agente.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · listar CPUUtilization por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudwatch list-metrics \
+  --namespace AWS/EC2 --metric-name CPUUtilization \
+  --dimensions Name=InstanceId,Value=&lt;INSTANCE_ID&gt; \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Ves <code>CPUUtilization</code> en <b>AWS/EC2</b>. Nota que ahí NO existen <code>mem_used_percent</code> ni <code>disk_used_percent</code>: el hipervisor no ve dentro del SO.</div>
+        </div>
+
+        <div class="step">
+          <h3>Ver la métrica personalizada (Curso/Obs)</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Metrics <span class="sep">›</span> All metrics <span class="sep">›</span> <b>Curso/Obs</b></div>
+          <p>El UserData publica <code>TareasCompletadas</code> con <code>PutMetricData</code> y un cron la refresca cada minuto.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · listar la métrica personalizada</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudwatch list-metrics \
+  --namespace Curso/Obs \
+  --dimensions Name=InstanceId,Value=&lt;INSTANCE_ID&gt; \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El namespace <b>Curso/Obs</b> muestra <code>TareasCompletadas</code> con datos.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="explorar">
+      <h2>Explorar y experimentar</h2>
+      <p>Ideas para profundizar y entender el comportamiento de las métricas:</p>
+      <ul>
+        <li>Poné <code>mem_used_percent</code> y <code>CPUUtilization</code> en el mismo gráfico y compará granularidad y origen (SO vs hipervisor).</li>
+        <li>Generá carga de CPU en la instancia y observá subir <code>CPUUtilization</code> (ver el comando en el <a href="#investigacion">escenario de investigación</a>).</li>
+        <li>Probá <b>Metrics Insights</b>: en la pestaña <b>Query</b>, ejecutá <code>SELECT AVG(mem_used_percent) FROM CWAgent GROUP BY InstanceId</code>.</li>
+        <li>Publicá tu propia métrica con <code>PutMetricData</code> desde tu máquina y verificala en <code>Curso/Obs</code>.</li>
+        <li>Revisá la config del agente en SSM Parameter Store y cambiá <code>metrics_collection_interval</code> a 10 s (alta resolución) para ver el efecto.</li>
+      </ul>
+    </section>
+
+    <section id="investigacion">
+      <h2>Escenario de investigación</h2>
+      <p>Objetivo: <b>comparar</b> las métricas del SO (<code>mem_used_percent</code>, <code>disk_used_percent</code>) con las del hipervisor (<code>CPUUtilization</code>) y luego <b>diagnosticar</b> por qué dejan de llegar las métricas del SO cuando el agente se detiene, usando SSM Session Manager y los logs del agente.</p>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Conectarse a la instancia sin SSH</h3>
+          <div class="console-path"><b>Systems Manager</b><span class="sep">›</span> Session Manager <span class="sep">›</span> <b>Start session</b> <span class="sep">›</span> elegí la instancia <code>obs-clase-1-ec2</code></div>
+          <div class="code">
+            <div class="code-head"><span>bash · Session Manager por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws ssm start-session --target &lt;INSTANCE_ID&gt; --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Obtenés una shell en la instancia sin abrir el puerto 22 ni usar llaves SSH.</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar que el agente está corriendo</h3>
+          <div class="code">
+            <div class="code-head"><span>bash · estado del agente</span><button class="copy-btn">copiar</button></div>
+            <pre>sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status</pre>
+          </div>
+          <p>El campo <code>status</code> debe decir <code>running</code>.</p>
+        </div>
+
+        <div class="step">
+          <h3>Detener el agente y observar el efecto</h3>
+          <div class="code">
+            <div class="code-head"><span>bash · detener el agente</span><button class="copy-btn">copiar</button></div>
+            <pre>sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a stop</pre>
+          </div>
+          <p>Volvé a CloudWatch y mirá los gráficos de <code>mem_used_percent</code> y <code>CPUUtilization</code> lado a lado durante 5–10 minutos.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Las métricas del SO (<b>CWAgent</b>) <b>dejan de recibir puntos nuevos</b>, mientras que <code>CPUUtilization</code> (<b>AWS/EC2</b>) <b>sigue llegando</b>: el hipervisor no depende del agente.</div>
+        </div>
+
+        <div class="step">
+          <h3>Diagnosticar con los logs del agente</h3>
+          <div class="code">
+            <div class="code-head"><span>bash · leer el log del agente</span><button class="copy-btn">copiar</button></div>
+            <pre>sudo tail -n 50 /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log</pre>
+          </div>
+          <p>El log confirma que el agente fue detenido. Si en vez de detenerlo vos, no arrancó, este log y <code>/var/log/cloud-init-output.log</code> (salida del UserData) muestran la causa (config inválida, permisos, etc.).</p>
+        </div>
+
+        <div class="step">
+          <h3>Reanudar el agente</h3>
+          <div class="code">
+            <div class="code-head"><span>bash · volver a arrancar con la config de SSM</span><button class="copy-btn">copiar</button></div>
+            <pre>sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s \
+  -c ssm:/observabilidad/obs-clase-1/cloudwatch-agent-config</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Tras 3–5 minutos, las métricas del SO vuelven a aparecer en <b>CWAgent</b>. Diagnóstico cerrado.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <p>Problemas frecuentes y cómo resolverlos. Detalle completo en <code>troubleshooting.md</code>.</p>
+      <div class="trouble">
+        <details>
+          <summary>El stack queda en ROLLBACK_COMPLETE</summary>
+          <p><span class="sym">Síntoma:</span> la creación falla y el stack se revierte.</p>
+          <p><span class="fix">Solución:</span> abrí la pestaña <b>Events</b>, buscá el primer error (arriba del rollback) y corregí el parámetro o permiso. Borrá el stack fallido antes de reintentar.</p>
+        </details>
+        <details>
+          <summary>No aparecen métricas del SO en CloudWatch</summary>
+          <p><span class="sym">Síntoma:</span> el namespace <b>CWAgent</b> está vacío.</p>
+          <p><span class="fix">Solución:</span> esperá 3–5 minutos; conectate por Session Manager y verificá el estado con <code>amazon-cloudwatch-agent-ctl -a status</code>; revisá el rol de la instancia y el log del agente.</p>
+        </details>
+        <details>
+          <summary>Busco mem_used_percent en AWS/EC2 y no aparece</summary>
+          <p><span class="sym">Síntoma:</span> no encontrás memoria ni uso de disco en el namespace del hipervisor.</p>
+          <p><span class="fix">Solución:</span> es esperado. EC2 nunca emite esas métricas: viven en <b>CWAgent</b> y solo existen con el agente corriendo.</p>
+        </details>
+        <details>
+          <summary>La instancia no aparece en Session Manager</summary>
+          <p><span class="sym">Síntoma:</span> no podés iniciar sesión desde SSM.</p>
+          <p><span class="fix">Solución:</span> verificá que el rol tenga <code>AmazonSSMManagedInstanceCore</code> y que la subred tenga salida a internet (ruta al IGW). Esperá 2–3 minutos a que el SSM Agent registre la instancia.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="limpieza">
+      <h2>Limpieza</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>Eliminar el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>obs-clase-1</b> <span class="sep">›</span> Delete</div>
+          <p>Al borrar el stack se eliminan todos los recursos (instancia, VPC, IGW, rol, parámetro SSM). No hay buckets ni recursos con <code>DeletionPolicy: Retain</code>, así que nada queda facturando.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · eliminar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation delete-stack --stack-name obs-clase-1 --region us-east-1</pre>
+          </div>
+          <div class="tip"><b class="t">Métricas personalizadas</b>Las métricas ya publicadas en CloudWatch (<code>CWAgent</code>, <code>Curso/Obs</code>) no se borran con el stack; expiran solas por retención y no generan costo adicional una vez que dejan de recibir datos.</div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack desaparece de la lista (estado <b>DELETE_COMPLETE</b>). No quedan recursos facturables.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="g-nav">
+      <a href="../presentacion/index.html">← Ver la presentación</a>
+      <a href="../../README.md">Índice del curso →</a>
+    </div>
+
+    <footer class="g-foot">Observabilidad y Monitoreo en AWS · Clase 1 · Laboratorio</footer>
+  </main>
+</div>
+
+<script src="../../assets/js/guide.js"></script>
+</body>
+</html>

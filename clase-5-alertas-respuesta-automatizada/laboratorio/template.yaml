@@ -1,0 +1,756 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+# ============================================================================
+# Laboratorio Clase 5 — Alertas, respuesta automatizada y cierre end-to-end
+# ----------------------------------------------------------------------------
+# Cierra el stack completo de observabilidad como infraestructura-como-codigo:
+#   - VPC + subred publica con Internet Gateway (salida a internet).
+#   - IAM Roles con managed policies minimas (instancia + EventBridge).
+#   - Instancia EC2 t3.micro con CloudWatch agent (config en SSM Parameter Store)
+#     que publica metricas del SO y logs de la app a un log group.
+#   - Alarma de METRICA sobre CPUUtilization (AWS/EC2).
+#   - Alarma por DETECCION DE ANOMALIA sobre CPUUtilization (banda dinamica).
+#   - Alarma COMPUESTA que combina metrica + anomalia (reduce ruido).
+#   - Topico SNS con suscripcion de email (notificaciones accionables).
+#   - Documento de SSM Automation (runbook de auto-remediacion).
+#   - Regla de EventBridge que, ante ALARM de la compuesta, dispara el runbook.
+#   - Dashboard de CloudWatch unificado (widgets de metricas + logs).
+#
+# Objetivo de costo: < USD 1 si se limpia al terminar (t3.micro, gp3 chico, single-AZ).
+# Todo el stack es borrable (sin DeletionPolicy: Retain).
+# ============================================================================
+
+Description: >-
+  Clase 5 - Observabilidad y Monitoreo en AWS. Cierre end-to-end: alarma de
+  metrica, alarma por deteccion de anomalia y alarma compuesta; topico SNS con
+  email; runbook de SSM Automation; regla de EventBridge que dispara la
+  auto-remediacion; y dashboard de CloudWatch unificado (metricas + logs).
+
+# ----------------------------------------------------------------------------
+# Metadata: agrupa y ordena los parametros en la consola de CloudFormation.
+# ----------------------------------------------------------------------------
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Notificaciones
+        Parameters:
+          - NotificationEmail
+      - Label:
+          default: Red
+        Parameters:
+          - VpcCidr
+          - PublicSubnetCidr
+      - Label:
+          default: Instancia EC2
+        Parameters:
+          - InstanceType
+          - LatestAmiId
+          - VolumeSizeGb
+      - Label:
+          default: Umbrales de alarma
+        Parameters:
+          - CpuAlarmThreshold
+    ParameterLabels:
+      NotificationEmail:
+        default: Email para la suscripcion SNS
+      VpcCidr:
+        default: Rango CIDR de la VPC
+      PublicSubnetCidr:
+        default: Rango CIDR de la subred publica
+      InstanceType:
+        default: Tipo de instancia
+      LatestAmiId:
+        default: AMI (Amazon Linux 2023, resuelta desde SSM)
+      VolumeSizeGb:
+        default: Tamano del disco raiz (GiB)
+      CpuAlarmThreshold:
+        default: Umbral de CPU (%) para la alarma de metrica
+
+# ----------------------------------------------------------------------------
+# Parameters: entradas configurables del stack (con defaults de bajo costo).
+# ----------------------------------------------------------------------------
+Parameters:
+  NotificationEmail:
+    Type: String
+    Description: >-
+      Email que recibira las notificaciones de las alarmas via SNS. Vas a
+      recibir un correo de confirmacion: hay que aceptarlo para activar la
+      suscripcion.
+    AllowedPattern: ^[^@\s]+@[^@\s]+\.[^@\s]+$
+    ConstraintDescription: Debe ser una direccion de email valida (por ejemplo persona@dominio.com).
+
+  VpcCidr:
+    Type: String
+    Default: 10.50.0.0/16
+    Description: Rango de direcciones IP de la VPC.
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: Debe ser un CIDR IPv4 valido (por ejemplo 10.50.0.0/16).
+
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.50.1.0/24
+    Description: Rango de direcciones IP de la subred publica.
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: Debe ser un CIDR IPv4 valido (por ejemplo 10.50.1.0/24).
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    Description: Tipo de instancia EC2 (t3.micro para mantener el costo bajo).
+    AllowedValues:
+      - t3.micro
+      - t3.small
+
+  VolumeSizeGb:
+    Type: Number
+    Default: 8
+    MinValue: 8
+    MaxValue: 30
+    Description: Tamano en GiB del volumen raiz gp3.
+
+  CpuAlarmThreshold:
+    Type: Number
+    Default: 70
+    MinValue: 10
+    MaxValue: 100
+    Description: Umbral de CPUUtilization (%) que dispara la alarma de metrica.
+
+  # AMI resuelta dinamicamente desde SSM Public Parameters: nunca se hardcodea el ID.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: AMI mas reciente de Amazon Linux 2023 (resuelta por SSM).
+
+# ----------------------------------------------------------------------------
+# Resources
+# ----------------------------------------------------------------------------
+Resources:
+
+  # ==========================================================================
+  # Red: VPC, subred publica, IGW y ruteo
+  # ==========================================================================
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: obs-clase-5-vpc
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: obs-clase-5-igw
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # Subred publica en la primera AZ de la region (single-AZ para minimizar costo).
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: obs-clase-5-subnet-public
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: obs-clase-5-rtb-public
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Group: sin puertos de entrada (acceso por SSM Session Manager).
+  # Solo salida para publicar metricas/logs a CloudWatch y hablar con SSM.
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Sin puertos de entrada; acceso via SSM Session Manager. Salida abierta.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Salida a internet para CloudWatch y SSM.
+      Tags:
+        - Key: Name
+          Value: obs-clase-5-sg
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  # ==========================================================================
+  # IAM: rol de la instancia con permisos minimos
+  # CloudWatchAgentServerPolicy: PutMetricData + logs + lectura de config en SSM.
+  # AmazonSSMManagedInstanceCore: habilita Systems Manager / Session Manager y
+  #   permite que el runbook de Automation ejecute comandos en la instancia.
+  # ==========================================================================
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # ==========================================================================
+  # CloudWatch Logs: log group de la aplicacion (fuente del widget de logs).
+  # ==========================================================================
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /observabilidad/${AWS::StackName}/app
+      RetentionInDays: 7
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  # ==========================================================================
+  # SSM Parameter Store: config JSON del CloudWatch agent (metricas + logs).
+  # ==========================================================================
+  CloudWatchAgentConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /observabilidad/${AWS::StackName}/cloudwatch-agent-config
+      Type: String
+      Tier: Standard
+      Description: Configuracion JSON del CloudWatch agent para la Clase 5.
+      Value: !Sub |
+        {
+          "agent": {
+            "metrics_collection_interval": 60,
+            "run_as_user": "cwagent"
+          },
+          "metrics": {
+            "namespace": "CWAgent",
+            "append_dimensions": {
+              "InstanceId": "${!aws:InstanceId}"
+            },
+            "aggregation_dimensions": [["InstanceId"]],
+            "metrics_collected": {
+              "mem": {
+                "measurement": ["mem_used_percent"]
+              },
+              "cpu": {
+                "measurement": ["cpu_usage_active"],
+                "totalcpu": true
+              }
+            }
+          },
+          "logs": {
+            "logs_collected": {
+              "files": {
+                "collect_list": [
+                  {
+                    "file_path": "/var/log/obs-app.log",
+                    "log_group_name": "/observabilidad/${AWS::StackName}/app",
+                    "log_stream_name": "{instance_id}"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      Tags:
+        Project: observabilidad-monitoreo-aws
+        Clase: "5"
+
+  # ==========================================================================
+  # EC2: host monitoreado. UserData instala/arranca el agente y deja utilidades
+  # para simular el incidente (estresar la CPU) que dispara la alarma.
+  # ==========================================================================
+  MonitoredInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: !Ref VolumeSizeGb
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          # 1) Instalar herramientas: CloudWatch agent + stress-ng (para el incidente).
+          dnf install -y amazon-cloudwatch-agent stress-ng || dnf install -y amazon-cloudwatch-agent
+
+          # 2) Log de la app de ejemplo (lo recolecta el agente hacia CloudWatch Logs).
+          touch /var/log/obs-app.log
+          echo "$(date -Is) INFO app iniciada ok" >> /var/log/obs-app.log
+
+          # 3) Arrancar el agente cargando la config directamente desde SSM Parameter Store.
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+            -a fetch-config -m ec2 -s \
+            -c ssm:${CloudWatchAgentConfig}
+
+          # 4) Script para SIMULAR el incidente: alto uso de CPU durante ~5 min.
+          #    Se usa en el escenario de investigacion para disparar la alarma.
+          cat >/usr/local/bin/simular-incidente.sh <<'SCRIPT'
+          #!/bin/bash
+          echo "$(date -Is) WARN incidente: iniciando carga alta de CPU" >> /var/log/obs-app.log
+          if command -v stress-ng >/dev/null 2>&1; then
+            stress-ng --cpu 0 --timeout 300s
+          else
+            # Fallback sin stress-ng: bucles de CPU por 5 minutos.
+            end=$(( $(date +%s) + 300 ))
+            for c in $(seq 1 "$(nproc)"); do
+              ( while [ "$(date +%s)" -lt "$end" ]; do : ; done ) &
+            done
+            wait
+          fi
+          echo "$(date -Is) INFO incidente: carga finalizada" >> /var/log/obs-app.log
+          SCRIPT
+          chmod +x /usr/local/bin/simular-incidente.sh
+
+          # 5) Log periodico de "latido" para que el widget de logs tenga datos.
+          cat >/usr/local/bin/latido.sh <<'SCRIPT'
+          #!/bin/bash
+          echo "$(date -Is) INFO heartbeat load=$(cat /proc/loadavg | cut -d' ' -f1)" >> /var/log/obs-app.log
+          SCRIPT
+          chmod +x /usr/local/bin/latido.sh
+          echo "* * * * * root /usr/local/bin/latido.sh" >/etc/cron.d/obs-latido
+      Tags:
+        - Key: Name
+          Value: obs-clase-5-ec2
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  # ==========================================================================
+  # SNS: topico + suscripcion de email (destino de las notificaciones).
+  # ==========================================================================
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-alertas
+      DisplayName: Alertas obs Clase 5
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  # Politica que permite a CloudWatch Alarms publicar en el topico.
+  AlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref AlertTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PermitirCloudWatchAlarms
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AlertTopic
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*
+
+  # ==========================================================================
+  # Alarmas de CloudWatch
+  # --------------------------------------------------------------------------
+  # 1) Alarma de METRICA: CPUUtilization por encima del umbral.
+  #    TreatMissingData=notBreaching evita falsos positivos por datos faltantes.
+  # ==========================================================================
+  CpuMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-cpu-alta
+      AlarmDescription: CPUUtilization por encima del umbral configurado.
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref MonitoredInstance
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: !Ref CpuAlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  # 2) Alarma por DETECCION DE ANOMALIA: banda dinamica sobre CPUUtilization.
+  #    Usa la funcion ANOMALY_DETECTION_BAND; salta si el valor sale de la banda.
+  CpuAnomalyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-cpu-anomalia
+      AlarmDescription: CPUUtilization fuera de la banda esperada (deteccion de anomalia).
+      ComparisonOperator: GreaterThanUpperThreshold
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      ThresholdMetricId: ad1
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: m1
+          MetricStat:
+            Metric:
+              Namespace: AWS/EC2
+              MetricName: CPUUtilization
+              Dimensions:
+                - Name: InstanceId
+                  Value: !Ref MonitoredInstance
+            Period: 60
+            Stat: Average
+          ReturnData: true
+        - Id: ad1
+          Expression: ANOMALY_DETECTION_BAND(m1, 2)
+          Label: Banda esperada de CPU
+          ReturnData: true
+
+  # 3) Alarma COMPUESTA: combina metrica y anomalia para reducir ruido.
+  #    Solo dispara cuando AMBAS estan en ALARM (senal fuerte, menos fatiga).
+  #    Su transicion a ALARM notifica por SNS y es el trigger de EventBridge.
+  CpuCompositeAlarm:
+    Type: AWS::CloudWatch::CompositeAlarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-cpu-compuesta
+      AlarmDescription: >-
+        Incidente confirmado de CPU: la metrica supera el umbral Y esta fuera de
+        la banda de anomalia. Notifica por SNS y dispara la auto-remediacion.
+      AlarmRule: !Sub >-
+        ALARM("${CpuMetricAlarm}") AND ALARM("${CpuAnomalyAlarm}")
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  # ==========================================================================
+  # SSM Automation: runbook de auto-remediacion.
+  # Ante el incidente, reinicia el CloudWatch agent, registra el evento en el
+  # log de la app y (paso comentado) permite reiniciar la instancia. En un lab
+  # real la remediacion "mata" el proceso que estresa la CPU.
+  # ==========================================================================
+  RemediationDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: !Sub ${AWS::StackName}-remediar-cpu
+      DocumentType: Automation
+      DocumentFormat: YAML
+      TargetType: /AWS::EC2::Instance
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+      Content:
+        schemaVersion: "0.3"
+        description: >-
+          Auto-remediacion de alto uso de CPU: detiene el proceso de estres,
+          reinicia el CloudWatch agent y deja constancia en el log de la app.
+        assumeRole: "{{ AutomationAssumeRole }}"
+        parameters:
+          InstanceId:
+            type: String
+            description: Instancia EC2 a remediar.
+            default: !Ref MonitoredInstance
+          AutomationAssumeRole:
+            type: String
+            description: Rol que asume SSM Automation para ejecutar el runbook.
+            default: !GetAtt AutomationRole.Arn
+        mainSteps:
+          - name: RemediarCPU
+            action: aws:runCommand
+            timeoutSeconds: 300
+            onFailure: Abort
+            inputs:
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - "{{ InstanceId }}"
+              Parameters:
+                commands:
+                  - "echo \"$(date -Is) ACTION auto-remediacion: deteniendo carga de CPU\" >> /var/log/obs-app.log"
+                  - "pkill -f stress-ng || true"
+                  - "pkill -f simular-incidente || true"
+                  - "/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status || true"
+                  - "echo \"$(date -Is) INFO auto-remediacion completada\" >> /var/log/obs-app.log"
+
+  # Rol que asume SSM Automation para correr el runbook (RunCommand en la EC2).
+  AutomationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  # ==========================================================================
+  # EventBridge: regla que reacciona al cambio de estado de la alarma compuesta.
+  # Patron: CloudWatch Alarm State Change a ALARM de la alarma compuesta.
+  # Target: el runbook de SSM Automation (auto-remediacion).
+  # ==========================================================================
+  RemediationEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${AWS::StackName}-alarma-a-runbook
+      Description: >-
+        Ante ALARM de la alarma compuesta de CPU, dispara el runbook de SSM
+        Automation para auto-remediar el incidente.
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        resources:
+          - !Sub arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${AWS::StackName}-cpu-compuesta
+        detail:
+          state:
+            value:
+              - ALARM
+      Targets:
+        - Id: runbook-remediacion
+          Arn: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${RemediationDocument}:$DEFAULT
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+          # Pasa la instancia y el rol de Automation como parametros del runbook.
+          # SSM Automation espera listas de strings por parametro.
+          InputTransformer:
+            InputPathsMap:
+              instance: "$.detail.configuration.metrics[0].metricStat.metric.dimensions.InstanceId"
+            InputTemplate: !Sub |
+              {
+                "InstanceId": ["${MonitoredInstance}"],
+                "AutomationAssumeRole": ["${AutomationRole.Arn}"]
+              }
+
+  # Rol que usa EventBridge para arrancar la ejecucion del runbook de Automation.
+  EventBridgeInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: permitir-start-automation
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:StartAutomationExecution
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${RemediationDocument}:*
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt AutomationRole.Arn
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "5"
+
+  # ==========================================================================
+  # Dashboard de CloudWatch unificado: widgets de metricas + widget de logs.
+  # ==========================================================================
+  UnifiedDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}-unificado
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "text",
+              "x": 0, "y": 0, "width": 24, "height": 2,
+              "properties": {
+                "markdown": "# Observabilidad Clase 5 - Dashboard unificado\nCPU, memoria, estado de alarmas y logs de la app para el stack **${AWS::StackName}**."
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 2, "width": 12, "height": 6,
+              "properties": {
+                "title": "CPUUtilization + banda de anomalia",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Average",
+                "period": 60,
+                "annotations": {
+                  "alarms": [
+                    "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${AWS::StackName}-cpu-anomalia"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 2, "width": 12, "height": 6,
+              "properties": {
+                "title": "Memoria usada (%)",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Average",
+                "period": 60,
+                "metrics": [
+                  [ "CWAgent", "mem_used_percent", "InstanceId", "${MonitoredInstance}" ]
+                ]
+              }
+            },
+            {
+              "type": "alarm",
+              "x": 0, "y": 8, "width": 12, "height": 4,
+              "properties": {
+                "title": "Estado de las alarmas de CPU",
+                "alarms": [
+                  "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${AWS::StackName}-cpu-compuesta",
+                  "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${AWS::StackName}-cpu-alta",
+                  "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${AWS::StackName}-cpu-anomalia"
+                ]
+              }
+            },
+            {
+              "type": "log",
+              "x": 12, "y": 8, "width": 12, "height": 6,
+              "properties": {
+                "title": "Logs de la app (incidente y remediacion)",
+                "region": "${AWS::Region}",
+                "query": "SOURCE '/observabilidad/${AWS::StackName}/app' | fields @timestamp, @message | sort @timestamp desc | limit 50",
+                "view": "table"
+              }
+            }
+          ]
+        }
+
+# ----------------------------------------------------------------------------
+# Outputs: IDs utiles, comandos de verificacion y enlaces de consola.
+# ----------------------------------------------------------------------------
+Outputs:
+  InstanceId:
+    Description: ID de la instancia EC2 monitoreada.
+    Value: !Ref MonitoredInstance
+
+  AlertTopicArn:
+    Description: ARN del topico SNS de alertas (confirma la suscripcion por email).
+    Value: !Ref AlertTopic
+
+  AppLogGroupName:
+    Description: Log group de la app (fuente del widget de logs y de Logs Insights).
+    Value: !Ref AppLogGroup
+
+  CompositeAlarmName:
+    Description: Nombre de la alarma compuesta (trigger de la auto-remediacion).
+    Value: !Sub ${AWS::StackName}-cpu-compuesta
+
+  RemediationDocumentName:
+    Description: Nombre del runbook de SSM Automation de auto-remediacion.
+    Value: !Ref RemediationDocument
+
+  SimularIncidenteCommand:
+    Description: Dispara el incidente de CPU dentro de la instancia (via Session Manager).
+    Value: !Sub >-
+      aws ssm send-command --document-name AWS-RunShellScript
+      --targets Key=InstanceIds,Values=${MonitoredInstance}
+      --parameters 'commands=["/usr/local/bin/simular-incidente.sh &"]'
+      --region ${AWS::Region}
+
+  SessionManagerCommand:
+    Description: Conectarse a la instancia por SSM Session Manager (sin SSH).
+    Value: !Sub aws ssm start-session --target ${MonitoredInstance} --region ${AWS::Region}
+
+  DashboardUrl:
+    Description: Enlace directo al dashboard unificado de CloudWatch.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards/dashboard/${AWS::StackName}-unificado"
+
+  AlarmsConsoleUrl:
+    Description: Enlace a la lista de alarmas de CloudWatch.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#alarmsV2:"

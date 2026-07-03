@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="AWS Fargate">
+  <defs>
+    <linearGradient id="grad_fargate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EC8B2B"/>
+      <stop offset="1" stop-color="#a9641e"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_fargate)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <rect x="4" y="6" width="32" height="28" rx="3" stroke-dasharray="4 3"/><rect x="12" y="16" width="16" height="12" rx="1"/><line x1="18" y1="16" x2="18" y2="28"/><line x1="24" y1="16" x2="24" y2="28"/>
+  </g>
+</svg>

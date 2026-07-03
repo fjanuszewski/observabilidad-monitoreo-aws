@@ -1,0 +1,367 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+# ============================================================================
+# Laboratorio Clase 1 — Fundamentos, métricas y monitoreo de EC2 con CloudWatch
+# ----------------------------------------------------------------------------
+# Despliega la base del entorno de observabilidad como infraestructura-como-código:
+#   - VPC + subred pública con Internet Gateway (salida a internet).
+#   - IAM Role + Instance Profile con las managed policies mínimas.
+#   - Parámetro en SSM Parameter Store con la config JSON del CloudWatch agent.
+#   - Instancia EC2 t3.micro que, vía UserData, instala el agente, lo configura
+#     desde SSM y publica una métrica personalizada con PutMetricData.
+#
+# Objetivo de costo: < USD 1 si se limpia al terminar (t3.micro, gp3 chico, single-AZ).
+# Todo el stack es borrable (sin DeletionPolicy: Retain).
+# ============================================================================
+
+Description: >-
+  Clase 1 - Observabilidad y Monitoreo en AWS. Stack base con VPC/subred publica,
+  instancia EC2 t3.micro con el CloudWatch agent (config en SSM Parameter Store)
+  publicando metricas del SO y una metrica personalizada con PutMetricData.
+
+# ----------------------------------------------------------------------------
+# Metadata: agrupa y ordena los parámetros en la consola de CloudFormation.
+# ----------------------------------------------------------------------------
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Red
+        Parameters:
+          - VpcCidr
+          - PublicSubnetCidr
+      - Label:
+          default: Instancia EC2
+        Parameters:
+          - InstanceType
+          - LatestAmiId
+          - VolumeSizeGb
+    ParameterLabels:
+      VpcCidr:
+        default: Rango CIDR de la VPC
+      PublicSubnetCidr:
+        default: Rango CIDR de la subred publica
+      InstanceType:
+        default: Tipo de instancia
+      LatestAmiId:
+        default: AMI (Amazon Linux 2023, resuelta desde SSM)
+      VolumeSizeGb:
+        default: Tamano del disco raiz (GiB)
+
+# ----------------------------------------------------------------------------
+# Parameters: entradas configurables del stack (con defaults de bajo costo).
+# ----------------------------------------------------------------------------
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+    Description: Rango de direcciones IP de la VPC.
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: Debe ser un CIDR IPv4 valido (por ejemplo 10.20.0.0/16).
+
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.20.1.0/24
+    Description: Rango de direcciones IP de la subred publica.
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: Debe ser un CIDR IPv4 valido (por ejemplo 10.20.1.0/24).
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    Description: Tipo de instancia EC2 (t3.micro para mantener el costo bajo).
+    AllowedValues:
+      - t3.micro
+      - t3.small
+
+  VolumeSizeGb:
+    Type: Number
+    Default: 8
+    MinValue: 8
+    MaxValue: 30
+    Description: Tamano en GiB del volumen raiz gp3.
+
+  # AMI resuelta dinamicamente desde SSM Public Parameters: nunca se hardcodea el ID.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: AMI mas reciente de Amazon Linux 2023 (resuelta por SSM).
+
+# ----------------------------------------------------------------------------
+# Resources
+# ----------------------------------------------------------------------------
+Resources:
+
+  # --------- Red: VPC, subred publica, IGW y ruteo ---------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: obs-clase-1-vpc
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: obs-clase-1-igw
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # Subred publica en la primera AZ de la region (single-AZ para minimizar costo).
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: obs-clase-1-subnet-public
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: obs-clase-1-rtb-public
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+  # Ruta por defecto (0.0.0.0/0) hacia el Internet Gateway: hace publica la subred.
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Group: no abre puertos de entrada (el acceso es por SSM Session Manager).
+  # Solo permite salida para publicar metricas a CloudWatch y hablar con SSM.
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Sin puertos de entrada; acceso via SSM Session Manager. Salida abierta.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Salida a internet para CloudWatch y SSM.
+      Tags:
+        - Key: Name
+          Value: obs-clase-1-sg
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+  # --------- IAM: rol de instancia con permisos minimos ---------
+  # CloudWatchAgentServerPolicy: PutMetricData + lectura de la config en SSM.
+  # AmazonSSMManagedInstanceCore: habilita Systems Manager / Session Manager.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # --------- SSM Parameter Store: config JSON del CloudWatch agent ---------
+  # El agente lee esta config al arrancar (versionada en Parameter Store).
+  # Recolecta metricas del SO en el namespace CWAgent con dimension InstanceId.
+  CloudWatchAgentConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /observabilidad/${AWS::StackName}/cloudwatch-agent-config
+      Type: String
+      Tier: Standard
+      Description: Configuracion JSON del CloudWatch agent para la Clase 1.
+      Value: |
+        {
+          "agent": {
+            "metrics_collection_interval": 60,
+            "run_as_user": "cwagent"
+          },
+          "metrics": {
+            "namespace": "CWAgent",
+            "append_dimensions": {
+              "InstanceId": "${aws:InstanceId}"
+            },
+            "aggregation_dimensions": [["InstanceId"]],
+            "metrics_collected": {
+              "mem": {
+                "measurement": [
+                  "mem_used_percent"
+                ]
+              },
+              "disk": {
+                "resources": ["/"],
+                "measurement": [
+                  "disk_used_percent"
+                ]
+              }
+            }
+          }
+        }
+      Tags:
+        Project: observabilidad-monitoreo-aws
+        Clase: "1"
+
+  # --------- EC2: host monitoreado ---------
+  # UserData: instala el agente, lo arranca con la config de SSM y publica
+  # una metrica personalizada con PutMetricData (namespace Curso/Obs).
+  MonitoredInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: !Ref VolumeSizeGb
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          # Region del lab (desde metadata) para las llamadas a AWS.
+          REGION="${AWS::Region}"
+
+          # 1) Instalar el CloudWatch agent (preinstalable via dnf en Amazon Linux 2023).
+          dnf install -y amazon-cloudwatch-agent
+
+          # 2) Arrancar el agente cargando la config directamente desde SSM Parameter Store.
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+            -a fetch-config -m ec2 -s \
+            -c ssm:${CloudWatchAgentConfig}
+
+          # 3) Publicar una metrica personalizada con PutMetricData (namespace propio).
+          #    Simula un contador de negocio (por ejemplo, "tareas completadas").
+          INSTANCE_ID="$(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
+          aws cloudwatch put-metric-data \
+            --region "$REGION" \
+            --namespace "Curso/Obs" \
+            --metric-name TareasCompletadas \
+            --unit Count \
+            --value 1 \
+            --dimensions InstanceId="$INSTANCE_ID"
+
+          # 4) Cron: publicar la metrica personalizada cada minuto para ver la serie.
+          cat >/usr/local/bin/publicar-metrica.sh <<'SCRIPT'
+          #!/bin/bash
+          IID="$(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
+          REG="$(curl -s http://169.254.169.254/latest/meta-data/placement/region)"
+          aws cloudwatch put-metric-data \
+            --region "$REG" \
+            --namespace "Curso/Obs" \
+            --metric-name TareasCompletadas \
+            --unit Count \
+            --value "$(( (RANDOM % 5) + 1 ))" \
+            --dimensions InstanceId="$IID"
+          SCRIPT
+          chmod +x /usr/local/bin/publicar-metrica.sh
+          echo "* * * * * root /usr/local/bin/publicar-metrica.sh" >/etc/cron.d/obs-metrica
+      Tags:
+        - Key: Name
+          Value: obs-clase-1-ec2
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "1"
+
+# ----------------------------------------------------------------------------
+# Outputs: IDs utiles y comandos de verificacion listos para copiar.
+# ----------------------------------------------------------------------------
+Outputs:
+  InstanceId:
+    Description: ID de la instancia EC2 monitoreada.
+    Value: !Ref MonitoredInstance
+
+  VpcId:
+    Description: ID de la VPC creada.
+    Value: !Ref Vpc
+
+  AgentConfigParameter:
+    Description: Nombre del parametro SSM con la config del CloudWatch agent.
+    Value: !Ref CloudWatchAgentConfig
+
+  SessionManagerCommand:
+    Description: Comando para conectarse a la instancia por SSM Session Manager (sin SSH).
+    Value: !Sub aws ssm start-session --target ${MonitoredInstance} --region ${AWS::Region}
+
+  ListSoMetricsCommand:
+    Description: Verificar que llegan metricas del SO (namespace CWAgent).
+    Value: !Sub >-
+      aws cloudwatch list-metrics --namespace CWAgent
+      --dimensions Name=InstanceId,Value=${MonitoredInstance} --region ${AWS::Region}
+
+  ListHypervisorMetricsCommand:
+    Description: Ver la metrica del hipervisor CPUUtilization (namespace AWS/EC2).
+    Value: !Sub >-
+      aws cloudwatch list-metrics --namespace AWS/EC2 --metric-name CPUUtilization
+      --dimensions Name=InstanceId,Value=${MonitoredInstance} --region ${AWS::Region}
+
+  ListCustomMetricCommand:
+    Description: Ver la metrica personalizada publicada con PutMetricData (Curso/Obs).
+    Value: !Sub >-
+      aws cloudwatch list-metrics --namespace Curso/Obs
+      --dimensions Name=InstanceId,Value=${MonitoredInstance} --region ${AWS::Region}
+
+  CloudWatchMetricsConsoleUrl:
+    Description: Enlace directo a Metrics en la consola de CloudWatch.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#metricsV2:"

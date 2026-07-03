@@ -1,0 +1,18 @@
+[
+  {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "10.20.0.0/16"
+  },
+  {
+    "ParameterKey": "PublicSubnetCidr",
+    "ParameterValue": "10.20.1.0/24"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t3.micro"
+  },
+  {
+    "ParameterKey": "VolumeSizeGb",
+    "ParameterValue": "8"
+  }
+]

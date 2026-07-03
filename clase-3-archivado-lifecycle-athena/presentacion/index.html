@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clase 3 · Archivado, ciclo de vida y explotación con Athena — Observabilidad y Monitoreo en AWS</title>
+  <link rel="stylesheet" href="../../assets/css/slides.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ============ 1. PORTADA ============ -->
+  <section class="slide slide--title">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span>
+      <span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <img class="title-logo" src="../../assets/img/logo-curso.svg" alt="">
+      <div class="eyebrow">Programa de capacitación · Clase 3 de 5</div>
+      <h1>Archivado, ciclo de vida y explotación con Athena</h1>
+      <p class="lead">Archivar económicamente y explotar logs con SQL: de CloudWatch Logs a un data lake en S3, y de ahí a una investigación de seguridad en Amazon Athena.</p>
+      <div class="title-meta">
+        <span class="title-chip"><img src="../../assets/img/services/firehose.svg" alt="">Amazon Data Firehose</span>
+        <span class="title-chip"><img src="../../assets/img/services/glacier.svg" alt="">S3 Glacier</span>
+        <span class="title-chip"><img src="../../assets/img/services/athena.svg" alt="">Amazon Athena</span>
+        <span class="title-chip">⏱ ~2 horas · 🧪 Laboratorio incluido</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OBJETIVOS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Objetivos</div>
+      <h2>Qué vas a lograr en esta clase</h2>
+      <ul class="checklist">
+        <li>Archivar logs a largo plazo de forma económica y conforme a normativa.</li>
+        <li>Decidir cuándo retener en CloudWatch Logs, cuándo en S3 y cuándo en Glacier.</li>
+        <li>Diseñar el ciclo de vida y la "rotación" de los datos con S3 Lifecycle.</li>
+        <li>Explotar los logs con SQL en Amazon Athena para troubleshooting e investigación.</li>
+        <li>Definir todo el pipeline como código en una única plantilla de CloudFormation.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 1 · CONTENIDO: dónde vive cada log ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 1 · Estrategia de archivado y costo</div>
+      <h2>Dónde vive cada log según su edad</h2>
+      <div class="cards g3">
+        <div class="card"><h3>🔥 Caliente · CloudWatch Logs</h3><p>Días a pocas semanas. Consulta inmediata con Logs Insights. Es el destino más caro por GB almacenado.</p></div>
+        <div class="card card--navy"><h3>❄️ Tibio · S3 Standard</h3><p>Semanas a meses. Data lake barato y consultable por Athena con SQL. Particionado por fecha.</p></div>
+        <div class="card card--accent"><h3>🧊 Frío · S3 Glacier</h3><p>Meses a años. El más económico, para retención regulatoria. Requiere restaurar antes de consultar.</p></div>
+      </div>
+      <div class="callout callout--info">
+        <div class="callout-title">Regla práctica</div>
+        <p>Mantener logs indefinidamente en CloudWatch Logs suele ser más caro que archivarlos en S3. La retención por log group va de 1 día a 10 años (o <code>Never expire</code>): usala para no pagar de más.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 2 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 2</div>
+      <h2>Streaming de logs a Amazon S3</h2>
+      <p>Del subscription filter a Firehose y a S3 en near real-time, con conversión a Parquet y particionado por fecha.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 2 · SERVICIO: Firehose (con origen CloudWatch Logs) ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/firehose.svg" alt="">
+        <div>
+          <span class="cat">Analytics · Streaming</span>
+          <h2>Amazon Data Firehose</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Servicio serverless que entrega streams a S3 en near real-time. Antes se llamaba Kinesis Data Firehose (rebranding 2024). El <strong>subscription filter</strong> de CloudWatch Logs es quien lo alimenta.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Buffering:</strong> agrupa por tamaño (MB) o tiempo (s) antes de escribir.</li>
+            <li><strong>Record format conversion:</strong> JSON a Parquet con el esquema de Glue.</li>
+            <li><strong>Particionado:</strong> prefijos <code>!{timestamp:yyyy/MM/dd}</code>; el error output va aparte.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Es el corazón del pipeline: recibe los logs del subscription filter, los convierte a Parquet, los comprime y los escribe particionados por fecha en S3.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+      <div class="callout callout--warn">
+        <div class="callout-title">Cuidado</div>
+        <p>Los logs de CloudWatch llegan gzip-comprimidos: hay que habilitar <strong>decompression</strong> y <strong>multi record deaggregation</strong> antes de convertir a Parquet, o Firehose escribe objetos ilegibles y Athena devuelve basura.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 3 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 3</div>
+      <h2>Ciclo de vida y rotación en S3</h2>
+      <p>La "rotación" en AWS no es logrotate: es retención, particionado y tiering automático con S3 Lifecycle.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 3 · SERVICIO: S3 + Glacier + Lifecycle ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/glacier.svg" alt="">
+        <div>
+          <span class="cat">Storage · Archivado</span>
+          <h2>S3 Lifecycle y clases Glacier</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Glacier no es un servicio aparte: son clases de S3 de muy bajo costo a las que se transiciona con reglas de Lifecycle sobre el bucket.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Instant Retrieval:</strong> acceso en milisegundos, uso poco frecuente.</li>
+            <li><strong>Flexible / Deep Archive:</strong> lo más barato; restore de minutos a ~12 h.</li>
+            <li><strong>Object Lock (WORM):</strong> retención inmutable para cumplimiento.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>La regla de Lifecycle del bucket transiciona los logs a Glacier tras 30 días para minimizar el costo de retención a largo plazo.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 4 · DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 4</div>
+      <h2>Explotación de datos con Amazon Athena</h2>
+      <p>SQL serverless sobre S3, con Glue Data Catalog y partition projection, para troubleshooting e investigación.</p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 4 · SERVICIO: Athena (con Glue como metastore) ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/athena.svg" alt="">
+        <div>
+          <span class="cat">Analytics · SQL serverless</span>
+          <h2>Amazon Athena + Glue Data Catalog</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Athena corre SQL serverless (motor Trino, engine v3) directamente sobre S3. Usa el <strong>Glue Data Catalog</strong> como metastore: bases, tablas, SerDe y particiones.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>SerDe correcto:</strong> CloudTrail usa su SerDe JSON; app puede usar Grok.</li>
+            <li><strong>Partition projection:</strong> calcula particiones sin <code>ALTER TABLE</code>.</li>
+            <li><strong>Workgroup:</strong> aísla queries, fija límites de bytes y ubicación de resultados.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Creás la base y la tabla en Glue que describen los logs de CloudTrail, y un workgroup de Athena con ubicación de resultados para la investigación.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 4 · CONSULTA DE INVESTIGACIÓN + Insights vs Athena ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Consulta de investigación</div>
+      <h2>Detectar quién abrió un puerto sensible</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li><strong>Logs Insights:</strong> logs recientes en CloudWatch, exploración rápida, sin mover datos.</li>
+            <li><strong>Athena:</strong> histórico archivado en S3, joins y SQL completo sobre Parquet.</li>
+          </ul>
+          <div class="callout callout--tip">
+            <div class="callout-title">Buena práctica</div>
+            <p>Incluí siempre un <code>WHERE</code> sobre la columna de partición de fecha, o la query escanea de más.</p>
+          </div>
+        </div>
+        <div>
+          <div class="code">
+            <pre><span class="c">-- CloudTrail: ¿quién abrió el puerto?</span>
+SELECT useridentity.arn AS quien,
+       eventtime, sourceipaddress
+FROM   cloudtrail_logs
+WHERE  eventname = <span class="s">'AuthorizeSecurityGroupIngress'</span>
+  AND  year=<span class="s">'2026'</span> AND month=<span class="s">'07'</span>
+ORDER  BY eventtime DESC;</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULO 5 · CONTENIDO: CloudFormation + IAM ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 5 · Todo como código</div>
+      <h2>El pipeline en CloudFormation, con IAM que lo enlaza</h2>
+      <div class="cols">
+        <div>
+          <div class="service-hero">
+            <img src="../../assets/img/services/cloudformation.svg" alt="">
+            <div><span class="cat">Recursos del stack</span><h3>Todo declarado</h3></div>
+          </div>
+          <ul>
+            <li><code>KinesisFirehose::DeliveryStream</code></li>
+            <li><code>S3::Bucket</code> con <code>LifecycleConfiguration</code></li>
+            <li><code>Logs::SubscriptionFilter</code></li>
+            <li><code>Glue::Database</code> / <code>Table</code></li>
+            <li><code>Athena::WorkGroup</code> · <code>IAM::Role</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="service-hero">
+            <img src="../../assets/img/services/iam.svg" alt="">
+            <div><span class="cat">Cadena de confianza</span><h3>Roles del pipeline</h3></div>
+          </div>
+          <ul>
+            <li><strong>Logs → Firehose:</strong> trust hacia <code>logs.amazonaws.com</code>.</li>
+            <li><strong>Firehose → S3/Glue:</strong> <code>s3:PutObject</code> + <code>glue:GetTable</code>.</li>
+            <li><strong>Athena → S3:</strong> lectura de logs + escritura de resultados.</li>
+          </ul>
+          <div class="callout callout--info">
+            <div class="callout-title">Least privilege</div>
+            <p>Usá <code>aws:SourceArn</code> para evitar el "confused deputy".</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAMA DE ARQUITECTURA ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Arquitectura del laboratorio</div>
+      <h2>Cómo fluyen los datos</h2>
+      <div class="arch">
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/cloudwatch-logs.svg" alt=""><span class="lbl">CloudWatch Logs</span><span class="sub">subscription filter</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/firehose.svg" alt=""><span class="lbl">Data Firehose</span><span class="sub">Parquet + fecha</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/s3.svg" alt=""><span class="lbl">Amazon S3</span><span class="sub">data lake</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/glacier.svg" alt=""><span class="lbl">S3 Glacier</span><span class="sub">Lifecycle 30 d</span></div>
+        </div>
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/glue.svg" alt=""><span class="lbl">Glue Catalog</span><span class="sub">esquema + SerDe</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/athena.svg" alt=""><span class="lbl">Amazon Athena</span><span class="sub">SQL sobre S3</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/s3.svg" alt=""><span class="lbl">Resultados</span><span class="sub">query location</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/iam.svg" alt=""><span class="lbl">IAM Roles</span><span class="sub">enlazan cada salto</span></div>
+        </div>
+        <p class="arch-caption">Firehose archiva en S3 particionado por fecha y Lifecycle baja a Glacier; Glue describe los datos y Athena los explota con SQL. Todo se despliega desde una plantilla de CloudFormation.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LABORATORIO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Manos a la obra</div>
+      <h2>Laboratorio de la clase</h2>
+      <div class="callout callout--lab">
+        <div class="callout-title">🧪 Qué vas a construir</div>
+        <p>El pipeline completo de archivado y explotación: subscription filter → Firehose → bucket S3 con partición por fecha y lifecycle a Glacier, más la tabla en Glue y un workgroup de Athena. Cerrás con una consulta que resuelve una investigación de seguridad. Todo por plantilla.</p>
+      </div>
+      <div class="cards g3">
+        <div class="card"><h3>1 · Desplegar</h3><p>Crear el stack: Firehose, bucket con lifecycle, Glue y workgroup de Athena.</p></div>
+        <div class="card"><h3>2 · Verificar</h3><p>Ver los objetos particionados en S3 y correr una consulta de prueba en Athena.</p></div>
+        <div class="card"><h3>3 · Investigar</h3><p>Detectar con SQL quién ejecutó <code>AuthorizeSecurityGroupIngress</code> sobre el puerto 22/3389 y cuándo.</p></div>
+      </div>
+      <p class="muted" style="margin-top:16px">Guía paso a paso: <code>laboratorio/guia.html</code> · Plantilla: <code>laboratorio/template.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- ============ CIERRE ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 3</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">RESUMEN</div>
+      <h2>Lo que te llevás</h2>
+      <ul>
+        <li>Una estrategia de tiering: CloudWatch Logs para lo caliente, S3 para lo tibio, Glacier para lo frío.</li>
+        <li>Un pipeline near real-time con Firehose, Parquet y particionado por fecha, gobernado por S3 Lifecycle.</li>
+        <li>La explotación forense con Athena + Glue, y el criterio de cuándo usar Logs Insights.</li>
+        <li>Próximo paso: hacer el laboratorio y pasar a la Clase 4 — observabilidad de contenedores en ECS y Fargate.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+<script src="../../assets/js/slides.js"></script>
+</body>
+</html>

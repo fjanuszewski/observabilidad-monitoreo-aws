@@ -1,0 +1,607 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+# ==========================================================================
+#  Clase 3 - Archivado, ciclo de vida y explotacion con Athena
+#  Laboratorio: pipeline de archivado economico + explotacion forense
+#
+#  Flujo que despliega esta plantilla:
+#    (1) EC2 t3.micro (via user-data) genera eventos con forma CloudTrail y
+#        los escribe en un log group de CloudWatch Logs.
+#    (2) CloudWatch Logs --[Subscription Filter]--> Amazon Data Firehose.
+#    (3) Firehose bufferea, descomprime los logs de CloudWatch y los escribe
+#        en S3 particionados por fecha (yyyy/MM/dd).
+#    (4) El bucket S3 tiene una regla de Lifecycle que transiciona a Glacier.
+#    (5) AWS Glue Data Catalog (Database + Table) describe los datos en S3.
+#    (6) Amazon Athena (Workgroup con result location) ejecuta la consulta
+#        SQL de investigacion de seguridad.
+#    (7) Los roles IAM enlazan cada salto del pipeline (least privilege).
+#
+#  Objetivo de costo: < USD 1 si se limpia al terminar.
+# ==========================================================================
+
+Description: >-
+  Clase 3 - Pipeline de archivado economico de logs (CloudWatch Logs ->
+  subscription filter -> Amazon Data Firehose -> S3 particionado por fecha con
+  lifecycle a Glacier) y explotacion con AWS Glue + Amazon Athena para
+  investigacion de seguridad. Todo como codigo, de bajo costo y borrable.
+
+# --------------------------------------------------------------------------
+#  Metadata: agrupa y ordena los parametros en la consola de CloudFormation.
+# --------------------------------------------------------------------------
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Configuracion general del laboratorio
+        Parameters:
+          - NombrePrefijo
+          - LatestAmiId
+      - Label:
+          default: Archivado y ciclo de vida (S3 / Glacier)
+        Parameters:
+          - DiasHastaGlacier
+          - DiasRetencionLogGroup
+    ParameterLabels:
+      NombrePrefijo:
+        default: Prefijo de nombres de recursos
+      LatestAmiId:
+        default: AMI de Amazon Linux 2023 (SSM)
+      DiasHastaGlacier:
+        default: Dias antes de transicionar a Glacier
+      DiasRetencionLogGroup:
+        default: Retencion del log group (dias)
+
+# --------------------------------------------------------------------------
+#  Parametros: nada hardcodeado. La AMI se resuelve por SSM (siempre la mas
+#  reciente de Amazon Linux 2023).
+# --------------------------------------------------------------------------
+Parameters:
+  NombrePrefijo:
+    Type: String
+    Default: obs-clase3
+    Description: >-
+      Prefijo para nombrar los recursos. Debe ser unico dentro de la cuenta y
+      valido como parte de un nombre de bucket (minusculas, numeros y guiones).
+    AllowedPattern: "^[a-z][a-z0-9-]{2,20}$"
+    ConstraintDescription: >-
+      Entre 3 y 21 caracteres: minusculas, numeros y guiones, empezando por letra.
+
+  LatestAmiId:
+    # AMI via SSM Parameter Store: nunca se hardcodea el ID de la imagen.
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Imagen de Amazon Linux 2023 resuelta automaticamente desde SSM.
+
+  DiasHastaGlacier:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 365
+    Description: >-
+      Dias que un objeto permanece en S3 Standard antes de transicionar a la
+      clase Glacier (Glacier Flexible Retrieval) via regla de Lifecycle.
+
+  DiasRetencionLogGroup:
+    Type: Number
+    Default: 1
+    AllowedValues: [1, 3, 5, 7, 14, 30]
+    Description: >-
+      Retencion del log group de origen. En CloudWatch Logs mantenemos poco
+      porque el archivado a largo plazo vive economicamente en S3/Glacier.
+
+Resources:
+
+  # ======================================================================
+  #  1) BUCKET S3 - repositorio central de logs archivados
+  #     - Cifrado SSE-S3 y acceso publico bloqueado (cumplimiento).
+  #     - Regla de Lifecycle que transiciona a Glacier tras N dias.
+  #     - Sin DeletionPolicy: Retain (el stack es borrable).
+  # ======================================================================
+  BucketArchivo:
+    Type: AWS::S3::Bucket
+    # El bucket se recrea/borra con el stack. Si queda con objetos hay que
+    # vaciarlo antes de borrar el stack (ver la seccion de limpieza).
+    Properties:
+      BucketName: !Sub "${NombrePrefijo}-archivo-${AWS::AccountId}-${AWS::Region}"
+      # Bloquea todo acceso publico: buckets de logs nunca deben ser publicos.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # Cifrado en reposo administrado por S3 (SSE-S3), sin costo extra de KMS.
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # Ciclo de vida: transicion a Glacier del prefijo de datos archivados.
+      LifecycleConfiguration:
+        Rules:
+          - Id: archivar-a-glacier
+            Status: Enabled
+            Prefix: cloudtrail/
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: !Ref DiasHastaGlacier
+          # Los resultados de Athena y el error output de Firehose se expiran
+          # solos (no vale la pena archivarlos).
+          - Id: expirar-resultados-athena
+            Status: Enabled
+            Prefix: athena-results/
+            ExpirationInDays: 7
+          - Id: expirar-errores-firehose
+            Status: Enabled
+            Prefix: errores/
+            ExpirationInDays: 7
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # ======================================================================
+  #  2) LOG GROUP de origen - recibe los eventos con forma CloudTrail
+  #     que genera la instancia EC2 (proxy del CloudTrail real del lab).
+  # ======================================================================
+  LogGroupOrigen:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/${NombrePrefijo}/cloudtrail-eventos"
+      RetentionInDays: !Ref DiasRetencionLogGroup
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # ======================================================================
+  #  3) IAM - Rol de entrega de Firehose hacia S3 y Glue
+  #     - Trust: firehose.amazonaws.com
+  #     - Permisos: s3:PutObject sobre el bucket + glue:GetTable* (Parquet).
+  #     - Condicion aws:SourceAccount para evitar 'confused deputy'.
+  # ======================================================================
+  RolFirehose:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NombrePrefijo}-firehose-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: entrega-s3-y-glue
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Escritura de objetos en el bucket de archivado.
+              - Sid: EscribirEnS3
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                  - s3:PutObject
+                Resource:
+                  - !GetAtt BucketArchivo.Arn
+                  - !Sub "${BucketArchivo.Arn}/*"
+              # Lectura del esquema de Glue (necesario para conversion a Parquet
+              # y util aunque el lab entregue JSON: no rompe least privilege).
+              - Sid: LeerEsquemaGlue
+                Effect: Allow
+                Action:
+                  - glue:GetTable
+                  - glue:GetTableVersion
+                  - glue:GetTableVersions
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDatabase}"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDatabase}/*"
+              # Escritura de logs propios de Firehose para diagnostico.
+              - Sid: LogsFirehose
+                Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/*"
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # ======================================================================
+  #  4) AMAZON DATA FIREHOSE - Delivery Stream
+  #     - Recibe del subscription filter y escribe en S3.
+  #     - Descompresion de CloudWatch Logs (llegan gzip por defecto).
+  #     - Particionado por fecha via prefijo yyyy/MM/dd.
+  #     - Buffering ajustado para generar pocos objetos (mejor para Glacier).
+  # ======================================================================
+  DeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Sub "${NombrePrefijo}-archivado"
+      DeliveryStreamType: DirectPut
+      ExtendedS3DestinationConfiguration:
+        BucketARN: !GetAtt BucketArchivo.Arn
+        RoleARN: !GetAtt RolFirehose.Arn
+        # Prefijo de datos particionado por fecha para que Athena escanee menos.
+        Prefix: "cloudtrail/!{timestamp:yyyy/MM/dd}/"
+        # Prefijo separado para el error output de Firehose.
+        ErrorOutputPrefix: "errores/!{firehose:error-output-type}/!{timestamp:yyyy/MM/dd}/"
+        BufferingHints:
+          # 64 MB o 60 s: lo que ocurra primero. Objetos grandes = menos overhead
+          # en Glacier y menos peticiones a S3.
+          SizeInMBs: 64
+          IntervalInSeconds: 60
+        CompressionFormat: GZIP
+        # Descompresion de los registros de CloudWatch Logs (llegan gzip) para
+        # que en S3 queden como JSON legible por Athena.
+        ProcessingConfiguration:
+          Enabled: true
+          Processors:
+            - Type: Decompression
+              Parameters:
+                - ParameterName: CompressionFormat
+                  ParameterValue: GZIP
+            - Type: CloudWatchLogProcessing
+              Parameters:
+                - ParameterName: DataMessageExtraction
+                  ParameterValue: "true"
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: !Ref LogGroupFirehose
+          LogStreamName: entrega-s3
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # Log group propio de Firehose (diagnostico de la entrega).
+  LogGroupFirehose:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/kinesisfirehose/${NombrePrefijo}-archivado"
+      RetentionInDays: 3
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # ======================================================================
+  #  5) IAM - Rol del Subscription Filter
+  #     - Trust: logs.amazonaws.com (con SourceArn del log group).
+  #     - Permite a CloudWatch Logs escribir en el delivery stream.
+  # ======================================================================
+  RolSubscriptionFilter:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NombrePrefijo}-cwl-to-firehose-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub "logs.${AWS::Region}.amazonaws.com"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: escribir-en-firehose
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - firehose:PutRecord
+                  - firehose:PutRecordBatch
+                Resource: !GetAtt DeliveryStream.Arn
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # ======================================================================
+  #  6) SUBSCRIPTION FILTER - CloudWatch Logs -> Firehose (near real-time)
+  #     FilterPattern vacio: reenvia todos los eventos del log group.
+  # ======================================================================
+  SubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      LogGroupName: !Ref LogGroupOrigen
+      FilterName: !Sub "${NombrePrefijo}-a-firehose"
+      FilterPattern: ""
+      DestinationArn: !GetAtt DeliveryStream.Arn
+      RoleArn: !GetAtt RolSubscriptionFilter.Arn
+
+  # ======================================================================
+  #  7) AWS GLUE DATA CATALOG - Database + Table (CloudTrail SerDe / JSON)
+  #     Describe los eventos de CloudTrail archivados en S3 para Athena.
+  #     Usa partition projection (fecha) -> sin ALTER TABLE ADD PARTITION.
+  # ======================================================================
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Sub "${NombrePrefijo}_archivo_db"
+        Description: Base de datos del laboratorio de archivado (Clase 3).
+
+  GlueTablaCloudTrail:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: cloudtrail_eventos
+        Description: Eventos de CloudTrail archivados en S3, particionados por fecha.
+        TableType: EXTERNAL_TABLE
+        # Columnas de particion: fecha derivada del prefijo yyyy/MM/dd.
+        PartitionKeys:
+          - Name: anio
+            Type: string
+          - Name: mes
+            Type: string
+          - Name: dia
+            Type: string
+        Parameters:
+          classification: json
+          # ----- Partition projection: Athena calcula las particiones -----
+          projection.enabled: "true"
+          projection.anio.type: integer
+          projection.anio.range: "2024,2030"
+          projection.anio.digits: "4"
+          projection.mes.type: integer
+          projection.mes.range: "1,12"
+          projection.mes.digits: "2"
+          projection.dia.type: integer
+          projection.dia.range: "1,31"
+          projection.dia.digits: "2"
+          storage.location.template: !Sub "s3://${BucketArchivo}/cloudtrail/${!anio}/${!mes}/${!dia}"
+        StorageDescriptor:
+          Location: !Sub "s3://${BucketArchivo}/cloudtrail/"
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            # SerDe JSON estandar de Hive (los eventos llegan como JSON de CloudTrail).
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+            Parameters:
+              case.insensitive: "true"
+              ignore.malformed.json: "true"
+          Columns:
+            - Name: eventversion
+              Type: string
+            - Name: eventtime
+              Type: string
+            - Name: eventsource
+              Type: string
+            - Name: eventname
+              Type: string
+            - Name: awsregion
+              Type: string
+            - Name: sourceipaddress
+              Type: string
+            - Name: useragent
+              Type: string
+            # useridentity aplanado en columnas simples para simplificar la query.
+            - Name: useridentity
+              Type: struct<type:string,principalid:string,arn:string,accountid:string,username:string>
+            - Name: requestparameters
+              Type: string
+            - Name: responseelements
+              Type: string
+            - Name: errorcode
+              Type: string
+            - Name: errormessage
+              Type: string
+
+  # ======================================================================
+  #  8) AMAZON ATHENA - Workgroup con result location en S3
+  #     - Result location: prefijo athena-results/ del mismo bucket.
+  #     - Limite de bytes escaneados por consulta (control de costo).
+  # ======================================================================
+  AthenaWorkgroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Sub "${NombrePrefijo}-wg"
+      Description: Workgroup del laboratorio de Clase 3 (explotacion con Athena).
+      State: ENABLED
+      # RecursiveDeleteOption no aplica aca; el workgroup se borra con el stack.
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: false
+        # Control de costo: limita datos escaneados por consulta a 100 MB.
+        BytesScannedCutoffPerQuery: 104857600
+        ResultConfiguration:
+          OutputLocation: !Sub "s3://${BucketArchivo}/athena-results/"
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  # Consulta guardada de investigacion de seguridad (named query).
+  # Detecta quien abrio un puerto sensible (22 / 3389) via
+  # AuthorizeSecurityGroupIngress y cuando.
+  NamedQueryInvestigacion:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Name: !Sub "${NombrePrefijo}-quien-abrio-puerto"
+      Description: >-
+        Investigacion: quien ejecuto AuthorizeSecurityGroupIngress abriendo un
+        puerto sensible (22/3389) y cuando.
+      Database: !Ref GlueDatabase
+      WorkGroup: !Ref AthenaWorkgroup
+      QueryString: !Sub |
+        -- Investigacion de seguridad sobre CloudTrail archivado.
+        -- Siempre filtrar por particion de fecha (anio/mes/dia) para escanear menos.
+        SELECT
+          eventtime,
+          useridentity.arn        AS quien,
+          useridentity.username   AS usuario,
+          sourceipaddress         AS ip_origen,
+          awsregion               AS region,
+          requestparameters       AS parametros
+        FROM "${GlueDatabase}"."cloudtrail_eventos"
+        WHERE eventname = 'AuthorizeSecurityGroupIngress'
+          AND (
+                requestparameters LIKE '%"fromPort":22%'
+             OR requestparameters LIKE '%"fromPort":3389%'
+          )
+          -- Ajustar la particion a la fecha de la investigacion:
+          AND anio = '2026' AND mes = '07'
+        ORDER BY eventtime DESC;
+
+  # ======================================================================
+  #  9) IAM - Rol de instancia EC2 (generador de eventos)
+  #     - AmazonSSMManagedInstanceCore: administracion sin SSH.
+  #     - Inline minima: solo escribir en el log group de origen.
+  # ======================================================================
+  RolInstancia:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NombrePrefijo}-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Policies:
+        - PolicyName: escribir-log-group-origen
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !GetAtt LogGroupOrigen.Arn
+                  - !Sub "${LogGroupOrigen.Arn}:*"
+      Tags:
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+  PerfilInstancia:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NombrePrefijo}-ec2-profile"
+      Roles:
+        - !Ref RolInstancia
+
+  # ======================================================================
+  # 10) EC2 t3.micro - genera eventos con forma CloudTrail
+  #     Via user-data escribe unos eventos de ejemplo (incluido uno de
+  #     AuthorizeSecurityGroupIngress abriendo el puerto 22) en el log group.
+  #     Asi el pipeline tiene datos que archivar y Athena algo que consultar.
+  # ======================================================================
+  Instancia:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref PerfilInstancia
+      # Disco chico gp3 para minimizar costo.
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          # ---- Generador de eventos con forma CloudTrail ----
+          LOG_GROUP="/${NombrePrefijo}/cloudtrail-eventos"
+          LOG_STREAM="generador-$(date +%s)"
+          REGION="${AWS::Region}"
+
+          aws logs create-log-stream --region "$REGION" \
+            --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" || true
+
+          TS=$(($(date +%s) * 1000))
+
+          # Evento clave de la investigacion: alguien abre el puerto 22 (SSH).
+          EV1=$(cat <<JSON
+          {"eventVersion":"1.08","eventTime":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","eventSource":"ec2.amazonaws.com","eventName":"AuthorizeSecurityGroupIngress","awsRegion":"$REGION","sourceIPAddress":"203.0.113.24","userAgent":"aws-cli/2.0","userIdentity":{"type":"IAMUser","principalId":"AIDAEXAMPLE123","arn":"arn:aws:iam::${AWS::AccountId}:user/pedro.admin","accountId":"${AWS::AccountId}","userName":"pedro.admin"},"requestParameters":{"groupId":"sg-0abc123","ipPermissions":{"items":[{"ipProtocol":"tcp","fromPort":22,"toPort":22,"ipRanges":{"items":[{"cidrIp":"0.0.0.0/0"}]}}]}}}
+          JSON
+          )
+          # Evento de ruido: un ListBuckets cualquiera.
+          EV2=$(cat <<JSON
+          {"eventVersion":"1.08","eventTime":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","eventSource":"s3.amazonaws.com","eventName":"ListBuckets","awsRegion":"$REGION","sourceIPAddress":"198.51.100.9","userAgent":"aws-cli/2.0","userIdentity":{"type":"IAMUser","principalId":"AIDAEXAMPLE456","arn":"arn:aws:iam::${AWS::AccountId}:user/ana.dev","accountId":"${AWS::AccountId}","userName":"ana.dev"},"requestParameters":null}
+          JSON
+          )
+
+          # Compacta el JSON a una linea y lo envia como eventos de log.
+          E1=$(echo "$EV1" | tr -d '\n' | tr -s ' ')
+          E2=$(echo "$EV2" | tr -d '\n' | tr -s ' ')
+
+          aws logs put-log-events --region "$REGION" \
+            --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" \
+            --log-events \
+              timestamp=$TS,message="$E1" \
+              timestamp=$((TS+1)),message="$E2"
+
+          echo "Eventos de ejemplo enviados al log group $LOG_GROUP"
+      Tags:
+        - Key: Name
+          Value: !Sub "${NombrePrefijo}-generador"
+        - Key: Project
+          Value: observabilidad-monitoreo-aws
+        - Key: Clase
+          Value: "3"
+
+# --------------------------------------------------------------------------
+#  Outputs: nombres de recursos y comandos utiles para verificar y explotar.
+# --------------------------------------------------------------------------
+Outputs:
+  BucketArchivoNombre:
+    Description: Bucket S3 de logs archivados (vaciarlo antes de borrar el stack).
+    Value: !Ref BucketArchivo
+
+  LogGroupOrigenNombre:
+    Description: Log group de origen sobre el que actua el subscription filter.
+    Value: !Ref LogGroupOrigen
+
+  DeliveryStreamNombre:
+    Description: Delivery stream de Amazon Data Firehose.
+    Value: !Ref DeliveryStream
+
+  GlueDatabaseNombre:
+    Description: Base de datos en el Glue Data Catalog.
+    Value: !Ref GlueDatabase
+
+  AthenaWorkgroupNombre:
+    Description: Workgroup de Athena (usarlo al ejecutar las consultas).
+    Value: !Ref AthenaWorkgroup
+
+  ConsultaVerificacionCLI:
+    Description: Comando para ver los objetos ya archivados en S3.
+    Value: !Sub "aws s3 ls s3://${BucketArchivo}/cloudtrail/ --recursive"
+
+  ConsultaAthenaCLI:
+    Description: Ejecuta la consulta de investigacion por CLI (ajusta anio/mes).
+    Value: !Sub >-
+      aws athena start-query-execution --work-group ${AthenaWorkgroup}
+      --query-string "SELECT eventtime, useridentity.arn, sourceipaddress FROM
+      \"${GlueDatabase}\".\"cloudtrail_eventos\" WHERE eventname =
+      'AuthorizeSecurityGroupIngress' AND anio='2026' AND mes='07';"
+      --region ${AWS::Region}

@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio · Clase 3 — Archivado, ciclo de vida y explotación con Athena</title>
+  <link rel="stylesheet" href="../../assets/css/guide.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+
+<header class="g-top">
+  <img src="../../assets/img/logo-curso.svg" alt="">
+  <div>
+    <div class="g-title">Laboratorio · Clase 3 — Archivado, ciclo de vida y explotación con Athena</div>
+    <div class="g-sub">Observabilidad y Monitoreo en AWS</div>
+  </div>
+  <span class="g-spacer"></span>
+  <span class="g-badge">CloudFormation</span>
+</header>
+
+<div class="g-wrap">
+  <!-- ---------------- SIDEBAR / TOC ---------------- -->
+  <aside class="g-side">
+    <p class="toc-title">Contenido</p>
+    <nav>
+      <a href="#intro">Introducción</a>
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#requisitos">Requisitos previos</a>
+      <a href="#desplegar">Desplegar el stack</a>
+      <a href="#verificar">Verificar en la consola</a>
+      <a href="#investigacion">Investigación con Athena</a>
+      <a href="#explorar">Explorar y experimentar</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#limpieza">Limpieza</a>
+    </nav>
+  </aside>
+
+  <!-- ---------------- CONTENIDO ---------------- -->
+  <main class="g-main">
+    <section id="intro">
+      <span class="eyebrow">Clase 3 · Laboratorio</span>
+      <h1>Archivado, ciclo de vida y explotación con Athena</h1>
+      <p class="g-lead">Vas a construir un pipeline de archivado económico de logs (CloudWatch Logs → Amazon Data Firehose → S3 particionado por fecha con Lifecycle a Glacier) y después vas a explotar esos logs con SQL en Amazon Athena para resolver una investigación de seguridad: <b>quién abrió un puerto sensible y cuándo</b>. Todo desplegado desde una única plantilla de CloudFormation.</p>
+
+      <div class="g-meta">
+        <span class="m">⏱ <b>Duración</b>&nbsp;· 45–60 min</span>
+        <span class="m">💵 <b>Costo</b>&nbsp;· &lt; USD 1 (si limpiás al terminar)</span>
+        <span class="m">📊 <b>Nivel</b>&nbsp;· Intermedio</span>
+        <span class="m">🌎 <b>Región sugerida</b>&nbsp;· us-east-1</span>
+      </div>
+
+      <div class="svc-row">
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch-logs.svg" alt="">CloudWatch Logs</span>
+        <span class="svc-chip"><img src="../../assets/img/services/firehose.svg" alt="">Data Firehose</span>
+        <span class="svc-chip"><img src="../../assets/img/services/s3.svg" alt="">S3</span>
+        <span class="svc-chip"><img src="../../assets/img/services/glacier.svg" alt="">Glacier</span>
+        <span class="svc-chip"><img src="../../assets/img/services/glue.svg" alt="">Glue</span>
+        <span class="svc-chip"><img src="../../assets/img/services/athena.svg" alt="">Athena</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+        <span class="svc-chip"><img src="../../assets/img/services/iam.svg" alt="">IAM</span>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <h2>Arquitectura</h2>
+      <p>La plantilla despliega el pipeline completo de archivado y explotación. Una instancia EC2 genera eventos con forma CloudTrail (incluido uno de <code>AuthorizeSecurityGroupIngress</code> abriendo el puerto 22) para que el pipeline tenga datos reales que archivar y consultar.</p>
+      <table>
+        <thead><tr><th>Recurso</th><th>Servicio</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td>Log group de origen</td><td>CloudWatch Logs</td><td>Recibe los eventos antes de archivarlos</td></tr>
+          <tr><td>Subscription filter</td><td>CloudWatch Logs</td><td>Empuja los eventos a Firehose en near real-time</td></tr>
+          <tr><td>Delivery stream</td><td>Amazon Data Firehose</td><td>Descomprime, bufferea y escribe en S3 por fecha</td></tr>
+          <tr><td>Bucket + Lifecycle</td><td>S3 / Glacier</td><td>Data lake con transición a Glacier tras N días</td></tr>
+          <tr><td>Database + tabla</td><td>AWS Glue Data Catalog</td><td>Describe los datos en S3 (JSON SerDe + projection)</td></tr>
+          <tr><td>Workgroup + named query</td><td>Amazon Athena</td><td>Ejecuta la consulta SQL de investigación</td></tr>
+          <tr><td>Instancia t3.micro</td><td>EC2</td><td>Genera los eventos de ejemplo</td></tr>
+          <tr><td>Roles IAM</td><td>IAM</td><td>Enlazan cada salto con least privilege</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><b class="t">Flujo</b>EC2 → CloudWatch Logs → (subscription filter) → Firehose → S3 (yyyy/MM/dd, Lifecycle→Glacier) → Glue Data Catalog → Athena.</div>
+    </section>
+
+    <section id="requisitos">
+      <h2>Requisitos previos</h2>
+      <ul>
+        <li>Cuenta de AWS con permisos para crear los recursos del laboratorio (S3, Firehose, Logs, Glue, Athena, EC2, IAM).</li>
+        <li>Acceso a la consola web de AWS (no se requiere CLI, pero se muestra la alternativa).</li>
+        <li>La plantilla nombra roles IAM: al desplegar hay que aceptar <code>CAPABILITY_NAMED_IAM</code>.</li>
+      </ul>
+      <div class="warn"><b class="t">Atención al costo</b>Todos los recursos son de bajo costo, pero el bucket S3 queda con objetos. Recordá <a href="#limpieza">vaciarlo y borrar el stack</a> al terminar para no dejar nada facturable.</div>
+    </section>
+
+    <section id="desplegar">
+      <h2>Desplegar el stack</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Iniciar sesión y elegir la región</h3>
+          <p>Ingresá a la consola de AWS y seleccioná la región del laboratorio.</p>
+          <div class="console-path"><b>Consola AWS</b><span class="sep">›</span> selector de región (arriba a la derecha) <span class="sep">›</span> <b>US East (N. Virginia) us-east-1</b></div>
+        </div>
+
+        <div class="step">
+          <h3>Abrir CloudFormation y crear el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>Create stack</b> <span class="sep">›</span> With new resources</div>
+          <p>Subí el archivo <code>template.yaml</code> de esta carpeta en <b>Upload a template file</b>.</p>
+        </div>
+
+        <div class="step">
+          <h3>Nombre y parámetros</h3>
+          <p>Poné un nombre al stack (por ejemplo <code>obs-clase-3</code>) y revisá los parámetros: <code>NombrePrefijo</code> (único en la cuenta), <code>DiasHastaGlacier</code> (por defecto 30) y <code>DiasRetencionLogGroup</code>.</p>
+          <div class="tip"><b class="t">Alternativa por CLI</b>Si preferís la línea de comandos:</div>
+          <div class="code">
+            <div class="code-head"><span>bash · desplegar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation deploy \
+  --stack-name obs-clase-3 \
+  --template-file template.yaml \
+  --parameter-overrides NombrePrefijo=obs-clase3 DiasHastaGlacier=30 \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1</pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar y crear</h3>
+          <p>Marcá la casilla que reconoce que CloudFormation puede crear recursos IAM con nombre (<code>CAPABILITY_NAMED_IAM</code>) y presioná <b>Submit</b>. Esperá el estado <code>CREATE_COMPLETE</code>.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack aparece en estado <b>CREATE_COMPLETE</b> y la pestaña <b>Outputs</b> muestra el nombre del bucket, el delivery stream, la base de Glue y el workgroup de Athena.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="verificar">
+      <h2>Verificar en la consola</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Confirmar que llegan eventos al log group</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Log groups <span class="sep">›</span> <b>/&lt;prefijo&gt;/cloudtrail-eventos</b></div>
+          <p>Deberías ver un log stream <code>generador-…</code> con un par de eventos JSON (uno de ellos, <code>AuthorizeSecurityGroupIngress</code> abriendo el puerto 22).</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El log group tiene al menos un stream con eventos con forma CloudTrail.</div>
+        </div>
+
+        <div class="step">
+          <h3>Ver los objetos archivados en S3</h3>
+          <div class="console-path"><b>S3</b><span class="sep">›</span> <b>&lt;prefijo&gt;-archivo-…</b> <span class="sep">›</span> prefijo <b>cloudtrail/</b></div>
+          <p>Firehose bufferea ~1–2 min antes de escribir. Al abrir, vas a ver la estructura particionada por fecha <code>cloudtrail/AAAA/MM/DD/</code>.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · listar objetos archivados</span><button class="copy-btn">copiar</button></div>
+            <pre>aws s3 ls s3://&lt;prefijo&gt;-archivo-&lt;accountId&gt;-us-east-1/cloudtrail/ --recursive</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Aparecen objetos bajo <code>cloudtrail/AAAA/MM/DD/</code>. Si tarda, esperá el intervalo de buffering (60 s).</div>
+        </div>
+
+        <div class="step">
+          <h3>Revisar la regla de Lifecycle</h3>
+          <div class="console-path"><b>S3</b><span class="sep">›</span> bucket <span class="sep">›</span> <b>Management</b> <span class="sep">›</span> Lifecycle rules</div>
+          <p>Confirmá la regla <code>archivar-a-glacier</code>: transiciona el prefijo <code>cloudtrail/</code> a la clase <b>Glacier</b> tras <code>DiasHastaGlacier</code> días.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La regla existe, está <b>Enabled</b> y apunta a Glacier.</div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar el catálogo de Glue y el workgroup de Athena</h3>
+          <div class="console-path"><b>Athena</b><span class="sep">›</span> Query editor <span class="sep">›</span> Workgroup <b>&lt;prefijo&gt;-wg</b> <span class="sep">›</span> Database <b>&lt;prefijo&gt;_archivo_db</b></div>
+          <p>En el panel izquierdo deberías ver la tabla <code>cloudtrail_eventos</code>. Seleccioná el workgroup del lab (tiene la result location y el límite de bytes escaneados ya configurados).</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Ves la tabla <code>cloudtrail_eventos</code> y el workgroup seleccionado. Athena está listo para consultar.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="investigacion">
+      <h2>Investigación con Athena</h2>
+      <p>Escenario: sospechamos que alguien abrió un puerto sensible (22 o 3389) en un security group. Vamos a responder <b>quién</b> lo hizo y <b>cuándo</b>, consultando los eventos de CloudTrail archivados en S3.</p>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Abrir la consulta guardada</h3>
+          <div class="console-path"><b>Athena</b><span class="sep">›</span> Query editor <span class="sep">›</span> pestaña <b>Saved queries</b> <span class="sep">›</span> <b>&lt;prefijo&gt;-quien-abrio-puerto</b></div>
+          <p>La plantilla creó una <b>named query</b> lista para ejecutar. También podés pegarla a mano en el editor.</p>
+        </div>
+
+        <div class="step">
+          <h3>Ejecutar la consulta de investigación</h3>
+          <p>Ajustá la partición de fecha (<code>anio</code>/<code>mes</code>) a la fecha en la que corriste el lab y ejecutá:</p>
+          <div class="code">
+            <div class="code-head"><span>sql · quién abrió un puerto sensible</span><button class="copy-btn">copiar</button></div>
+            <pre>SELECT
+  eventtime,
+  useridentity.arn      AS quien,
+  useridentity.username AS usuario,
+  sourceipaddress       AS ip_origen,
+  awsregion             AS region,
+  requestparameters     AS parametros
+FROM "&lt;prefijo&gt;_archivo_db"."cloudtrail_eventos"
+WHERE eventname = 'AuthorizeSecurityGroupIngress'
+  AND (
+        requestparameters LIKE '%"fromPort":22%'
+     OR requestparameters LIKE '%"fromPort":3389%'
+  )
+  AND anio = '2026' AND mes = '07'   -- ajustá a la fecha de tus datos
+ORDER BY eventtime DESC;</pre>
+          </div>
+          <div class="tip"><b class="t">Por qué el WHERE de fecha</b>Filtrar por las columnas de partición (<code>anio</code>/<code>mes</code>/<code>dia</code>) hace que Athena escanee menos datos: más rápido y más barato. El workgroup además corta cada query a 100 MB.</div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>La consulta devuelve una fila con <code>pedro.admin</code>, su IP de origen (<code>203.0.113.24</code>), la región y el <code>eventtime</code>. Ya sabés <b>quién</b> abrió el puerto 22 y <b>cuándo</b>.</div>
+        </div>
+
+        <div class="step">
+          <h3>(Opcional) Ejecutar la investigación por CLI</h3>
+          <div class="code">
+            <div class="code-head"><span>bash · lanzar la query por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws athena start-query-execution \
+  --work-group &lt;prefijo&gt;-wg \
+  --query-string "SELECT eventtime, useridentity.arn, sourceipaddress \
+    FROM \"&lt;prefijo&gt;_archivo_db\".\"cloudtrail_eventos\" \
+    WHERE eventname='AuthorizeSecurityGroupIngress' \
+      AND anio='2026' AND mes='07';" \
+  --region us-east-1</pre>
+          </div>
+          <p>Los resultados quedan en el prefijo <code>athena-results/</code> del bucket.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="explorar">
+      <h2>Explorar y experimentar</h2>
+      <p>Ideas para profundizar y entender el comportamiento del pipeline.</p>
+      <ul>
+        <li>Cambiá el buffering de Firehose (<code>SizeInMBs</code> / <code>IntervalInSeconds</code>) y observá cómo varía la cantidad y el tamaño de los objetos en S3. Menos objetos grandes = mejor para Glacier.</li>
+        <li>Bajá <code>DiasHastaGlacier</code> a 1 en un stack de prueba y mirá cómo la Lifecycle transiciona los objetos (y por qué Athena luego no los lee sin restaurar).</li>
+        <li>Quitá el filtro de partición de la query y compará los bytes escaneados: el workgroup debería cortar a 100 MB.</li>
+        <li>Buscá <code>RevokeSecurityGroupIngress</code> para ver quién <i>cerró</i> el puerto y correlacionar con la apertura.</li>
+        <li>Compará cuándo usar Logs Insights (lo reciente en CloudWatch Logs) vs Athena (lo archivado en S3, gran volumen, bajo costo).</li>
+      </ul>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <p>Problemas frecuentes y cómo resolverlos. Ideal para practicar diagnóstico. Detalle completo en <a href="./troubleshooting.md">troubleshooting.md</a>.</p>
+      <div class="trouble">
+        <details>
+          <summary>Athena devuelve basura o caracteres ilegibles</summary>
+          <p><span class="sym">Síntoma:</span> los objetos en S3 no se leen bien.</p>
+          <p><span class="fix">Solución:</span> los logs de CloudWatch llegan gzip-comprimidos; hay que habilitar la <b>decompresión</b> en Firehose (esta plantilla ya la trae con <code>Decompression</code> + <code>CloudWatchLogProcessing</code>).</p>
+        </details>
+        <details>
+          <summary>La consulta de Athena devuelve cero filas</summary>
+          <p><span class="sym">Síntoma:</span> hay objetos en S3 pero la query no trae nada.</p>
+          <p><span class="fix">Solución:</span> verificá que <code>anio</code>/<code>mes</code>/<code>dia</code> coincidan con la fecha real de los objetos, que el <code>LOCATION</code> apunte a <code>cloudtrail/</code> y que la partition projection cubra el rango de fechas.</p>
+        </details>
+        <details>
+          <summary>La query es lenta o cara</summary>
+          <p><span class="sym">Síntoma:</span> Athena escanea demasiados datos.</p>
+          <p><span class="fix">Solución:</span> incluí siempre un <code>WHERE</code> sobre las columnas de partición de fecha. El workgroup corta cada query a 100 MB.</p>
+        </details>
+        <details>
+          <summary>Athena falla al leer objetos ya archivados en Glacier</summary>
+          <p><span class="sym">Síntoma:</span> error sobre objetos en clase Glacier.</p>
+          <p><span class="fix">Solución:</span> Athena no lee Glacier no-instant sin restaurar; solo se archivan datos ya "fríos" (tras <code>DiasHastaGlacier</code> días).</p>
+        </details>
+        <details>
+          <summary>El stack queda en ROLLBACK_COMPLETE</summary>
+          <p><span class="sym">Síntoma:</span> la creación falla y se revierte.</p>
+          <p><span class="fix">Solución:</span> suele ser el nombre de bucket ya en uso (son globales). Abrí <b>Events</b>, buscá el primer error y cambiá <code>NombrePrefijo</code>.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="limpieza">
+      <h2>Limpieza</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Vaciar el bucket S3</h3>
+          <p>Firehose y Athena dejan objetos en el bucket, y un bucket con contenido no se puede borrar. Vacialo primero.</p>
+          <div class="console-path"><b>S3</b><span class="sep">›</span> <b>&lt;prefijo&gt;-archivo-…</b> <span class="sep">›</span> <b>Empty</b></div>
+          <div class="code">
+            <div class="code-head"><span>bash · vaciar el bucket</span><button class="copy-btn">copiar</button></div>
+            <pre>aws s3 rm s3://&lt;prefijo&gt;-archivo-&lt;accountId&gt;-us-east-1/ --recursive</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El bucket queda vacío (sin objetos ni versiones).</div>
+        </div>
+
+        <div class="step">
+          <h3>Eliminar el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>obs-clase-3</b> <span class="sep">›</span> Delete</div>
+          <div class="code">
+            <div class="code-head"><span>bash · eliminar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation delete-stack --stack-name obs-clase-3 --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack desaparece de la lista (estado <b>DELETE_COMPLETE</b>). No quedan recursos facturables.</div>
+        </div>
+
+      </div>
+      <div class="note"><b class="t">Costo</b>Objetivo del lab: &lt; USD 1. EC2 t3.micro + gp3 de 8 GB por los minutos que dure, Firehose y S3/Glacier por unos KB de ejemplo, y Athena por datos escaneados (acotado por el workgroup).</div>
+    </section>
+
+    <div class="g-nav">
+      <a href="../presentacion/index.html">← Ver la presentación</a>
+      <a href="../../README.md">Índice del curso →</a>
+    </div>
+
+    <footer class="g-foot">Observabilidad y Monitoreo en AWS · Clase 3 · Laboratorio</footer>
+  </main>
+</div>
+
+<script src="../../assets/js/guide.js"></script>
+</body>
+</html>

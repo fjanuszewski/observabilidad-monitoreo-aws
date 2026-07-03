@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="S3 Glacier">
+  <defs>
+    <linearGradient id="grad_glacier" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3F8624"/>
+      <stop offset="1" stop-color="#2d6019"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_glacier)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <line x1="20" y1="4" x2="20" y2="36"/><line x1="6" y1="12" x2="34" y2="28"/><line x1="34" y1="12" x2="6" y2="28"/><path d="M20 4 l-3 4 M20 4 l3 4 M20 36 l-3 -4 M20 36 l3 -4"/>
+  </g>
+</svg>

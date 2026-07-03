@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laboratorio · Clase 4 — Observabilidad de contenedores (ECS + Fargate)</title>
+  <link rel="stylesheet" href="../../assets/css/guide.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+
+<header class="g-top">
+  <img src="../../assets/img/logo-curso.svg" alt="">
+  <div>
+    <div class="g-title">Laboratorio · Clase 4 — Observabilidad de contenedores (ECS + Fargate)</div>
+    <div class="g-sub">Observabilidad y Monitoreo en AWS</div>
+  </div>
+  <span class="g-spacer"></span>
+  <span class="g-badge">CloudFormation</span>
+</header>
+
+<div class="g-wrap">
+  <!-- ---------------- SIDEBAR / TOC ---------------- -->
+  <aside class="g-side">
+    <p class="toc-title">Contenido</p>
+    <nav>
+      <a href="#intro">Introducción</a>
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#requisitos">Requisitos previos</a>
+      <a href="#desplegar">Desplegar el stack</a>
+      <a href="#verificar">Verificar en la consola</a>
+      <a href="#explorar">Explorar y experimentar</a>
+      <a href="#investigacion">Escenario de investigación</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#limpieza">Limpieza</a>
+    </nav>
+  </aside>
+
+  <!-- ---------------- CONTENIDO ---------------- -->
+  <main class="g-main">
+    <section id="intro">
+      <span class="eyebrow">Clase 4 · Laboratorio</span>
+      <h1>Observabilidad de contenedores (ECS + Fargate)</h1>
+      <p class="g-lead">Vas a desplegar un clúster de <b>Amazon ECS</b> con un servicio en <b>AWS Fargate</b>, con <b>Container Insights (enhanced observability)</b> habilitado y los logs del contenedor <b>ruteados con FireLens (Fluent Bit)</b> hacia CloudWatch Logs. Después vas a explorar las métricas por tarea y contenedor, forzar un reinicio y correlacionar el pico de métricas con los logs para hallar la causa.</p>
+
+      <div class="g-meta">
+        <span class="m">⏱ <b>Duración</b>&nbsp;· 30–45 min</span>
+        <span class="m">💵 <b>Costo</b>&nbsp;· &lt; USD 1 (si limpiás al terminar)</span>
+        <span class="m">📊 <b>Nivel</b>&nbsp;· Intermedio</span>
+        <span class="m">🌎 <b>Región sugerida</b>&nbsp;· us-east-1</span>
+      </div>
+
+      <div class="svc-row">
+        <span class="svc-chip"><img src="../../assets/img/services/ecs.svg" alt="">Amazon ECS</span>
+        <span class="svc-chip"><img src="../../assets/img/services/fargate.svg" alt="">AWS Fargate</span>
+        <span class="svc-chip"><img src="../../assets/img/services/container-insights.svg" alt="">Container Insights</span>
+        <span class="svc-chip"><img src="../../assets/img/services/firelens.svg" alt="">FireLens</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudwatch.svg" alt="">CloudWatch</span>
+        <span class="svc-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <h2>Arquitectura</h2>
+      <p>La plantilla despliega todo el laboratorio en una sola pasada: la red mínima, el clúster con Container Insights <code>enhanced</code>, la task definition con la app y el sidecar FireLens, y el servicio Fargate.</p>
+      <table>
+        <thead><tr><th>Recurso</th><th>Servicio</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td>VPC + subred pública + IGW</td><td>Amazon VPC</td><td>Red single-AZ para que la tarea baje las imágenes públicas (sin NAT)</td></tr>
+          <tr><td>Clúster <code>&lt;prefijo&gt;-cluster</code></td><td>Amazon ECS</td><td>Clúster con <b>Container Insights enhanced</b></td></tr>
+          <tr><td>Task definition (app + log_router)</td><td>ECS / Fargate</td><td>Contenedor de app (httpd + logs a stdout) + sidecar FireLens</td></tr>
+          <tr><td>Servicio <code>&lt;prefijo&gt;-svc</code></td><td>Amazon ECS</td><td>Mantiene 1 tarea Fargate corriendo</td></tr>
+          <tr><td>Log group <code>/&lt;prefijo&gt;/app</code></td><td>CloudWatch Logs</td><td>Destino final de los logs de la app (los escribe FireLens)</td></tr>
+          <tr><td>Log group <code>/&lt;prefijo&gt;/firelens</code></td><td>CloudWatch Logs</td><td>Diagnóstico del propio sidecar Fluent Bit</td></tr>
+          <tr><td>Execution role + Task role</td><td>IAM</td><td>Pull de imagen + logs (mínimos)</td></tr>
+        </tbody>
+      </table>
+      <p>Flujo: <b>Servicio Fargate → Task → contenedor <code>app</code> → log driver <code>awsfirelens</code> → sidecar Fluent Bit → CloudWatch Logs</b>. En paralelo, <b>Container Insights (enhanced)</b> publica las métricas por clúster, servicio, tarea y contenedor.</p>
+      <div class="tip"><b class="t">Fargate no expone el host</b>Al no tener acceso a la instancia EC2 subyacente, no administrás ni parcheás hosts, y no hay parámetro de AMI. Las métricas de tarea/contenedor las provee Container Insights, no un agente en el host.</div>
+    </section>
+
+    <section id="requisitos">
+      <h2>Requisitos previos</h2>
+      <ul>
+        <li>Cuenta de AWS con permisos para crear ECS, Fargate, VPC, IAM y CloudWatch Logs.</li>
+        <li>Acceso a la consola web de AWS (no se requiere CLI, pero se muestra la alternativa).</li>
+        <li>Para la vía CLI: AWS CLI v2 configurado. La plantilla <b>nombra roles IAM</b>, así que hay que aceptar la capacidad <code>CAPABILITY_NAMED_IAM</code>.</li>
+      </ul>
+      <div class="warn"><b class="t">Atención al costo</b>Container Insights <b>enhanced</b> factura por observaciones y la tarea Fargate por hora. Todo es de bajo costo, pero recordá ejecutar la <a href="#limpieza">limpieza</a> al terminar para no dejar nada corriendo.</div>
+    </section>
+
+    <section id="desplegar">
+      <h2>Desplegar el stack</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Iniciar sesión y elegir la región</h3>
+          <p>Ingresá a la consola de AWS y seleccioná la región del laboratorio.</p>
+          <div class="console-path"><b>Consola AWS</b><span class="sep">›</span> selector de región (arriba a la derecha) <span class="sep">›</span> <b>US East (N. Virginia) us-east-1</b></div>
+        </div>
+
+        <div class="step">
+          <h3>Abrir CloudFormation y crear el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>Create stack</b> <span class="sep">›</span> With new resources</div>
+          <p>Subí el archivo <code>template.yaml</code> de esta carpeta en <b>Upload a template file</b>.</p>
+        </div>
+
+        <div class="step">
+          <h3>Nombre y parámetros</h3>
+          <p>Poné un nombre al stack (por ejemplo <code>obs-clase-4</code>) y revisá los parámetros: prefijo de nombres, CIDRs de la red, imágenes de la app y del sidecar, y la retención de logs. Los valores por defecto ya sirven para el lab.</p>
+          <div class="tip"><b class="t">Alternativa por CLI</b>Si preferís la línea de comandos:</div>
+          <div class="code">
+            <div class="code-head"><span>bash · desplegar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation deploy \
+  --stack-name obs-clase-4 \
+  --template-file template.yaml \
+  --parameter-overrides file://parameters.example.json \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1</pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Confirmar y crear</h3>
+          <p>Marcá la casilla de capacidades IAM (<code>CAPABILITY_NAMED_IAM</code>) y presioná <b>Submit</b>. Esperá el estado <code>CREATE_COMPLETE</code> (la creación de la red + clúster + servicio tarda unos minutos).</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack aparece en estado <b>CREATE_COMPLETE</b> y la pestaña <b>Outputs</b> muestra el nombre del clúster, del servicio y los log groups.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="verificar">
+      <h2>Verificar en la consola</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>La tarea está corriendo</h3>
+          <div class="console-path"><b>Amazon ECS</b><span class="sep">›</span> Clusters <span class="sep">›</span> <b>&lt;prefijo&gt;-cluster</b> <span class="sep">›</span> Services <span class="sep">›</span> <b>&lt;prefijo&gt;-svc</b> <span class="sep">›</span> Tasks</div>
+          <p>Confirmá que hay <b>1 tarea</b> en estado <code>RUNNING</code> con sus dos contenedores (<code>app</code> y <code>log_router</code>) sanos.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · estado del servicio por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws ecs describe-services \
+  --cluster obs-clase4-cluster --services obs-clase4-svc \
+  --query "services[0].{status:status,running:runningCount,desired:desiredCount}" \
+  --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div><code>runningCount</code> == <code>desiredCount</code> == 1 y el status del servicio es <code>ACTIVE</code>.</div>
+        </div>
+
+        <div class="step">
+          <h3>Los logs llegan vía FireLens</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Log groups <span class="sep">›</span> <b>/&lt;prefijo&gt;/app</b></div>
+          <p>Abrí el log group de la app y mirá el stream <code>app-…</code>. Vas a ver líneas JSON <code>INFO</code> y, cada 10 iteraciones, una <code>WARN</code>. Esos logs los emitió el contenedor <code>app</code> y los ruteó el sidecar FireLens (Fluent Bit).</p>
+          <div class="code">
+            <div class="code-head"><span>bash · seguir los logs en vivo</span><button class="copy-btn">copiar</button></div>
+            <pre>aws logs tail /obs-clase4/app --follow --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>Ves eventos JSON con un campo <code>seq</code> incremental. El log group <code>/&lt;prefijo&gt;/firelens</code> muestra el arranque del router sin errores.</div>
+        </div>
+
+        <div class="step">
+          <h3>Métricas por tarea y contenedor en Container Insights</h3>
+          <div class="console-path"><b>CloudWatch</b><span class="sep">›</span> Insights <span class="sep">›</span> Container Insights <span class="sep">›</span> Performance monitoring <span class="sep">›</span> <b>ECS Clusters</b> <span class="sep">›</span> tu clúster</div>
+          <p>Cambiá el selector de nivel entre <b>Clusters</b>, <b>Services</b>, <b>Tasks</b> y <b>Containers</b>. Con enhanced observability vas a ver CPU y memoria hasta el nivel de <b>contenedor</b>, además del seguimiento de despliegues.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>En el nivel <b>Tasks</b>/<b>Containers</b> ves puntos de datos de CPU y memoria de tu tarea (pueden tardar 3–5 min en aparecer tras el arranque).</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="explorar">
+      <h2>Explorar y experimentar</h2>
+      <p>Ideas para profundizar en la observabilidad de contenedores:</p>
+      <ul>
+        <li><b>Estándar vs enhanced:</b> cambiá el clúster a <code>containerInsights = enabled</code> y observá qué métricas por contenedor desaparecen.</li>
+        <li><b>awslogs vs FireLens:</b> cambiá el log driver del contenedor <code>app</code> de <code>awsfirelens</code> a <code>awslogs</code> y compará la simplicidad frente a la flexibilidad de rutear a S3 / OpenSearch / terceros con FireLens.</li>
+        <li><b>Logs Insights:</b> en el log group de la app, contá eventos por <code>level</code> con <code>filter level = "WARN" | stats count() by bin(1m)</code>.</li>
+        <li><b>APM (siguiente paso):</b> sumá un sidecar <b>ADOT</b> y activá <b>CloudWatch Application Signals</b> para empezar a ver trazas correlacionadas (introducción del Módulo 4).</li>
+      </ul>
+    </section>
+
+    <section id="investigacion">
+      <h2>Escenario de investigación</h2>
+      <p>Explorá Container Insights a nivel de <b>tarea y contenedor</b>, <b>forzá un reinicio</b> del contenedor y <b>correlacioná</b> el pico de métricas con los logs para hallar la causa.</p>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Tomá una línea base</h3>
+          <p>En Container Insights, bajá al nivel de <b>Tasks</b> y <b>Containers</b> y anotá el uso normal de CPU y memoria del contenedor <code>app</code> (bajo: es un httpd ocioso que imprime una línea cada 5 s).</p>
+        </div>
+
+        <div class="step">
+          <h3>Forzá un reinicio de la tarea</h3>
+          <p>Provocá que el servicio recree la tarea para generar un evento observable. Por consola: <b>ECS › Cluster › Servicio › Tasks</b>, seleccioná la tarea y <b>Stop</b> (el servicio, con <code>desiredCount: 1</code>, la vuelve a crear). O por CLI:</p>
+          <div class="code">
+            <div class="code-head"><span>bash · parar la tarea (el servicio la recrea)</span><button class="copy-btn">copiar</button></div>
+            <pre>TASK_ARN=$(aws ecs list-tasks --cluster obs-clase4-cluster \
+  --service-name obs-clase4-svc --query "taskArns[0]" \
+  --output text --region us-east-1)
+
+aws ecs stop-task --cluster obs-clase4-cluster --task "$TASK_ARN" \
+  --reason "lab: forzar reinicio para investigar" --region us-east-1</pre>
+          </div>
+          <div class="tip"><b class="t">Alternativa</b>Un <code>aws ecs update-service --force-new-deployment</code> también reemplaza la tarea y dispara el deployment tracking.</div>
+        </div>
+
+        <div class="step">
+          <h3>Correlacioná el pico con los logs</h3>
+          <p>En Container Insights vas a ver la tarea vieja desaparecer y una <b>tarea nueva</b> arrancar (spike de arranque en CPU/memoria) y el evento de reemplazo en el <b>deployment tracking</b> del servicio. Alineá ese timestamp con los logs: en <code>/&lt;prefijo&gt;/app</code> el campo <code>seq</code> <b>se reinicia desde 1</b> cuando arranca la tarea nueva.</p>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El corte de la secuencia en los logs coincide con el spike de arranque en las métricas: esa es la huella del reinicio, y confirma <b>qué</b> tarea/contenedor se reinició y <b>cuándo</b>.</div>
+        </div>
+
+      </div>
+      <div class="tip"><b class="t">Causa raíz</b>El pico de métricas coincide con el arranque de una tarea nueva; los logs (secuencia reiniciada + los metadatos de ECS que agrega FireLens) confirman el reinicio. Esa es la mecánica de correlación <b>infraestructura ↔ servicio ↔ log</b> que después extendés a trazas con ADOT / Application Signals / X-Ray.</div>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <p>Problemas frecuentes y cómo resolverlos. Ideal para practicar diagnóstico. Ver el <a href="./troubleshooting.md">troubleshooting completo</a>.</p>
+      <div class="trouble">
+        <details>
+          <summary>La tarea no arranca o entra en loop de reinicio</summary>
+          <p><span class="sym">Síntoma:</span> el servicio nunca llega a <code>runningCount == 1</code> o la tarea se detiene una y otra vez.</p>
+          <p><span class="fix">Solución:</span> revisá el <b>Stopped reason</b> de la tarea. Suele ser <code>CannotPullContainerError</code> (sin salida a Internet: falta IP pública o ruta al IGW) o falta de permisos del <b>execution role</b>.</p>
+        </details>
+        <details>
+          <summary>No aparecen logs de la app en CloudWatch</summary>
+          <p><span class="sym">Síntoma:</span> el log group <code>/&lt;prefijo&gt;/app</code> está vacío aunque la tarea corre.</p>
+          <p><span class="fix">Solución:</span> verificá que el <b>task role</b> tenga <code>logs:CreateLogStream</code> y <code>logs:PutLogEvents</code> sobre ese log group, que el log group exista (o poné <code>auto_create_group: "true"</code>) y que el sidecar <code>log_router</code> esté sano (mirá <code>/&lt;prefijo&gt;/firelens</code>).</p>
+        </details>
+        <details>
+          <summary>No hay métricas en Container Insights</summary>
+          <p><span class="sym">Síntoma:</span> el clúster no muestra datos.</p>
+          <p><span class="fix">Solución:</span> confirmá que el clúster tenga <code>containerInsights = enhanced</code>, esperá 3–5 min tras el arranque y asegurate de estar mirando el nivel correcto (Tasks/Containers para ver CPU/memoria por contenedor).</p>
+        </details>
+        <details>
+          <summary>El stack queda en ROLLBACK_COMPLETE</summary>
+          <p><span class="sym">Síntoma:</span> la creación falla y el stack se revierte.</p>
+          <p><span class="fix">Solución:</span> abrí la pestaña <b>Events</b>, buscá el primer error (arriba del rollback). Suele ser colisión de nombres IAM (cambiá <code>NombrePrefijo</code>), CIDR inválido o falta de <code>CAPABILITY_NAMED_IAM</code>.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="limpieza">
+      <h2>Limpieza</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>Eliminar el stack</h3>
+          <div class="console-path"><b>CloudFormation</b><span class="sep">›</span> Stacks <span class="sep">›</span> <b>obs-clase-4</b> <span class="sep">›</span> Delete</div>
+          <p>Al borrar el stack se baja el servicio, la tarea y toda la red. No hay bucket S3 ni objetos que vaciar en este lab, y la plantilla no usa <code>DeletionPolicy: Retain</code>, así que todo se elimina.</p>
+          <div class="code">
+            <div class="code-head"><span>bash · eliminar por CLI</span><button class="copy-btn">copiar</button></div>
+            <pre>aws cloudformation delete-stack --stack-name obs-clase-4 --region us-east-1</pre>
+          </div>
+          <div class="checkpoint"><div class="cp-title">Checkpoint</div>El stack desaparece de la lista (estado <b>DELETE_COMPLETE</b>). El clúster ya no aparece en ECS y los log groups se borran. No quedan recursos facturables.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="g-nav">
+      <a href="../presentacion/index.html">← Ver la presentación</a>
+      <a href="../../README.md">Índice del curso →</a>
+    </div>
+
+    <footer class="g-foot">Observabilidad y Monitoreo en AWS · Clase 4 · Laboratorio</footer>
+  </main>
+</div>
+
+<script src="../../assets/js/guide.js"></script>
+</body>
+</html>

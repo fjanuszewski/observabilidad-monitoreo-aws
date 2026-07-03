@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clase 5 — Alertas, respuesta automatizada y cierre end-to-end</title>
+  <link rel="stylesheet" href="../../assets/css/slides.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ============ 1. PORTADA ============ -->
+  <section class="slide slide--title">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span>
+      <span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <img class="title-logo" src="../../assets/img/logo-curso.svg" alt="">
+      <div class="eyebrow">Programa de capacitación · Clase 5 de 5</div>
+      <h1>Alertas, respuesta automatizada y cierre end-to-end</h1>
+      <p class="lead">Alertas accionables, auto-remediación y visualización unificada.</p>
+      <div class="title-meta">
+        <span class="title-chip"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt="">CloudWatch Alarms</span>
+        <span class="title-chip"><img src="../../assets/img/services/eventbridge.svg" alt="">EventBridge</span>
+        <span class="title-chip"><img src="../../assets/img/services/sns.svg" alt="">Amazon SNS</span>
+        <span class="title-chip">⏱ ~2 horas · 🧪 Laboratorio incluido</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OBJETIVOS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Objetivos</div>
+      <h2>Qué vas a lograr en esta clase</h2>
+      <ul class="checklist">
+        <li>Diseñar alertas accionables y reducir el ruido y la fatiga de alertas.</li>
+        <li>Automatizar la respuesta a incidentes con EventBridge, Lambda y runbooks de SSM.</li>
+        <li>Consolidar la visualización con dashboards de CloudWatch y Amazon Managed Grafana.</li>
+        <li>Cerrar el stack de observabilidad end-to-end y validarlo simulando un incidente real.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 3. DIVISOR MÓDULO 1 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 1</div>
+      <h2>Alarmas de Amazon CloudWatch</h2>
+      <p>De una métrica a una decisión: tipos de alarma, estados, datos faltantes y acciones automáticas.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4. SERVICIO: CLOUDWATCH ALARMS ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudwatch-alarms.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>Alarmas de CloudWatch</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Una alarma observa una métrica (o una expresión de métricas) contra un umbral durante un número de periodos y cambia de estado para disparar acciones.</p>
+          <h3>Tres tipos</h3>
+          <ul>
+            <li><strong>De métrica:</strong> umbral estático sobre una métrica, p. ej. <code>CPUUtilization &gt; 80%</code>.</li>
+            <li><strong>Compuesta:</strong> combina varias alarmas con lógica <code>AND</code>/<code>OR</code> para reducir ruido.</li>
+            <li><strong>De anomalía:</strong> aprende una banda esperada y alerta cuando la métrica se sale de ella.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>El lab crea las tres: una de métrica sobre la CPU, una compuesta que agrupa señales y una por detección de anomalía. La alarma de CPU dispara la auto-remediación.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. ESTADOS, DATOS FALTANTES Y ACCIONES ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 1 · Estados y acciones</div>
+      <h2>Estados, datos faltantes y qué disparan</h2>
+      <div class="cols">
+        <div>
+          <h3>Estados</h3>
+          <ul>
+            <li><strong>OK:</strong> la métrica está dentro del umbral.</li>
+            <li><strong>ALARM:</strong> se cruzó el umbral el tiempo definido.</li>
+            <li><strong>INSUFFICIENT_DATA:</strong> faltan datos para evaluar.</li>
+          </ul>
+          <h3>Datos faltantes</h3>
+          <ul>
+            <li><code>notBreaching</code>, <code>breaching</code>, <code>ignore</code> o <code>missing</code>: definen cómo tratar los periodos sin dato.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>⚙️ Acciones de alarma</h3>
+          <ul>
+            <li><strong>SNS:</strong> notifica a personas o sistemas.</li>
+            <li><strong>Auto Scaling:</strong> escala en respuesta a la carga.</li>
+            <li><strong>Acciones de EC2:</strong> reiniciar, detener o recuperar.</li>
+            <li><strong>Systems Manager:</strong> abrir un OpsItem o disparar automatización.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. DIVISOR MÓDULO 2 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 2</div>
+      <h2>Eventos y respuesta automatizada</h2>
+      <p>Que el sistema se cure solo: EventBridge como bus de eventos, auto-remediación con Lambda o SSM y notificaciones a los canales del equipo.</p>
+    </div>
+  </section>
+
+  <!-- ============ 7. SERVICIO: EVENTBRIDGE ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/eventbridge.svg" alt="">
+        <div>
+          <span class="cat">Application Integration</span>
+          <h2>Amazon EventBridge</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>El bus de eventos serverless de AWS (antes CloudWatch Events). Enruta eventos de servicios de AWS y de tus aplicaciones hacia destinos, según patrones.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Buses:</strong> el bus por defecto recibe eventos de AWS; podés crear buses propios.</li>
+            <li><strong>Reglas y patrones:</strong> un patrón JSON filtra eventos (origen, tipo, detalle).</li>
+            <li><strong>Destinos:</strong> Lambda, SSM Automation, SNS, Step Functions y más.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>Una regla escucha el cambio de estado de la alarma de CPU a <code>ALARM</code> y dispara el runbook de SSM que remedia el incidente automáticamente.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. AUTO-REMEDIACIÓN Y NOTIFICACIONES ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 2 · Remediar y avisar</div>
+      <h2>Auto-remediación y notificaciones</h2>
+      <div class="cols">
+        <div>
+          <div class="svc"><img src="../../assets/img/services/systems-manager.svg" alt="">SSM Automation · Lambda</div>
+          <ul>
+            <li><strong>Runbooks de SSM Automation:</strong> pasos declarativos y reutilizables para remediar (reiniciar un servicio, aislar una instancia).</li>
+            <li><strong>Lambda:</strong> lógica de remediación a medida cuando el runbook no alcanza.</li>
+          </ul>
+          <div class="svc" style="margin-top:12px"><img src="../../assets/img/services/sns.svg" alt="">SNS · Chatbot</div>
+          <ul>
+            <li>SNS fan-out hacia email, Slack o PagerDuty.</li>
+            <li>AWS Chatbot lleva las alertas a canales de Slack o Teams.</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code">
+            <pre><span class="c"># patrón de evento: alarma que pasa a ALARM</span>
+{
+  <span class="s">"source"</span>: [<span class="s">"aws.cloudwatch"</span>],
+  <span class="s">"detail-type"</span>: [<span class="s">"CloudWatch Alarm State Change"</span>],
+  <span class="s">"detail"</span>: {
+    <span class="s">"state"</span>: { <span class="s">"value"</span>: [<span class="s">"ALARM"</span>] }
+  }
+}</pre>
+          </div>
+          <div class="callout callout--tip">
+            <div class="callout-title">Buena práctica</div>
+            <p>Que la remediación sea idempotente y deje rastro: registrá cada ejecución del runbook para poder auditar qué se automatizó.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. DIVISOR MÓDULO 3 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 3</div>
+      <h2>Dashboards y visualización</h2>
+      <p>Una sola pantalla para operar: dashboards de CloudWatch, Grafana multi-fuente e investigación asistida por IA.</p>
+    </div>
+  </section>
+
+  <!-- ============ 10. SERVICIO: DASHBOARDS + GRAFANA ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudwatch-dashboards.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>Dashboards y Grafana</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>CloudWatch Dashboards</h3>
+          <ul>
+            <li><strong>Widgets</strong> de métricas, logs, texto y alarmas en una vista.</li>
+            <li><strong>Variables</strong> para cambiar de instancia o entorno sin editar el dashboard.</li>
+            <li>Vistas <strong>cross-account / cross-region</strong> para consolidar toda la organización.</li>
+          </ul>
+          <h3>Amazon Managed Grafana</h3>
+          <ul>
+            <li>Grafana gestionado, para dashboards <strong>multi-fuente</strong> (CloudWatch, Prometheus y más).</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>El lab arma un dashboard unificado con widgets de métricas (CPU, estado de las alarmas) y de logs. <strong>CloudWatch Investigations</strong> ayuda a la causa raíz con IA.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 11. DIVISOR MÓDULO 4 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 4</div>
+      <h2>Estrategia de monitoreo para producción</h2>
+      <p>Alertar para actuar, no para saturar: umbrales accionables, SLIs/SLOs, runbooks y detección temprana.</p>
+    </div>
+  </section>
+
+  <!-- ============ 12. UMBRALES, SLO Y RUNBOOKS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Módulo 4 · Alertas que valen la pena</div>
+      <h2>Umbrales accionables y menos ruido</h2>
+      <div class="cards g3">
+        <div class="card">
+          <h3>Reducir el ruido</h3>
+          <p>Alertá solo sobre síntomas accionables. Usá alarmas <strong>compuestas</strong> y umbrales por <strong>duración</strong> para evitar la fatiga de alertas.</p>
+        </div>
+        <div class="card">
+          <h3>SLIs y SLOs</h3>
+          <p>El <strong>SLI</strong> mide la experiencia; el <strong>SLO</strong> fija la meta. Alertá cuando el <em>error budget</em> se agota, no ante cada pico.</p>
+        </div>
+        <div class="card">
+          <h3>Runbooks operativos</h3>
+          <p>Cada alerta apunta a un <strong>runbook</strong>: qué significa, cómo diagnosticar y cómo remediar. La detección temprana acorta el impacto.</p>
+        </div>
+      </div>
+      <div class="callout callout--info">
+        <div class="callout-title">🧭 Idea clave</div>
+        <p>Si una alerta no requiere una acción humana o automática, no debería despertar a nadie: mandala a un dashboard, no a la guardia.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 13. DIVISOR MÓDULO 5 ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 5</div>
+      <h2>Cierre end-to-end</h2>
+      <p>Todo el stack junto: métricas, logs, archivado, contenedores, alertas y dashboard, funcionando como un solo sistema.</p>
+    </div>
+  </section>
+
+  <!-- ============ 14. DIAGRAMA DE ARQUITECTURA DEL LAB ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Arquitectura del laboratorio</div>
+      <h2>Cómo fluye la auto-remediación</h2>
+      <div class="arch">
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/ec2.svg" alt=""><span class="lbl">EC2</span><span class="sub">alto uso de CPU</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt=""><span class="lbl">Alarma</span><span class="sub">CPU · compuesta · anomalía</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/eventbridge.svg" alt=""><span class="lbl">EventBridge</span><span class="sub">regla + patrón</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/systems-manager.svg" alt=""><span class="lbl">SSM Automation</span><span class="sub">runbook remedia</span></div>
+        </div>
+        <div class="flow" style="margin-top:14px">
+          <div class="node"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt=""><span class="lbl">Alarma</span><span class="sub">notifica</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/sns.svg" alt=""><span class="lbl">SNS</span><span class="sub">email al equipo</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch-dashboards.svg" alt=""><span class="lbl">Dashboard</span><span class="sub">métricas + logs</span></div>
+        </div>
+        <p class="arch-caption">Un incidente de CPU dispara la alarma → EventBridge → runbook de SSM que remedia; SNS avisa al equipo y el dashboard unificado muestra todo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 15. SLIDE DE LABORATORIO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Manos a la obra</div>
+      <h2>Laboratorio de la clase</h2>
+      <div class="callout callout--lab">
+        <div class="callout-title">🧪 Qué vas a construir</div>
+        <p>Con una plantilla de CloudFormation cerrás el stack completo: una alarma de métrica, una compuesta y una de anomalía; una regla de EventBridge que dispara un runbook de SSM Automation (auto-remediación); un tópico SNS con suscripción de email y un dashboard de CloudWatch unificado con widgets de métricas y logs.</p>
+      </div>
+      <div class="cards g3">
+        <div class="card"><h3>1 · Desplegar</h3><p>Crear el stack: alarmas, EventBridge, runbook de SSM, SNS y dashboard.</p></div>
+        <div class="card"><h3>2 · Simular</h3><p>Provocar alto uso de CPU y ver la alarma → EventBridge → runbook remediar solo.</p></div>
+        <div class="card"><h3>3 · Investigar</h3><p>Revisar dashboard y notificación SNS; indagar con Logs Insights, Athena y el service map.</p></div>
+      </div>
+      <p class="muted" style="margin-top:16px">Guía paso a paso: <code>laboratorio/guia.html</code> · Plantilla: <code>laboratorio/template.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- ============ 16. CIERRE ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 5</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">RESUMEN</div>
+      <h2>Lo que te llevás</h2>
+      <ul>
+        <li>Las alarmas de CloudWatch (de métrica, compuesta y de anomalía) convierten métricas en decisiones y disparan acciones sin intervención humana.</li>
+        <li>EventBridge enruta el cambio de estado de una alarma hacia un runbook de SSM o una Lambda, cerrando el ciclo de auto-remediación.</li>
+        <li>Un dashboard unificado (y Grafana para multi-fuente) más SNS/Chatbot dan una sola pantalla y avisos accionables.</li>
+        <li>Una buena estrategia de producción alerta poco y bien: umbrales accionables, SLOs, runbooks y detección temprana. Con esto queda cerrado el stack end-to-end del curso.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+<script src="../../assets/js/slides.js"></script>
+</body>
+</html>

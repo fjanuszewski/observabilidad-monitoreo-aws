@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="AWS KMS">
+  <defs>
+    <linearGradient id="grad_kms" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C7303C"/>
+      <stop offset="1" stop-color="#8f222b"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_kms)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <circle cx="14" cy="14" r="7"/><line x1="18.5" y1="18.5" x2="33" y2="33"/><line x1="27" y1="27" x2="31" y2="23"/><line x1="31" y1="31" x2="35" y2="27"/>
+  </g>
+</svg>

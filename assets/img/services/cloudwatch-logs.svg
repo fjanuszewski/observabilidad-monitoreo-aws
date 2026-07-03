@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="CloudWatch Logs">
+  <defs>
+    <linearGradient id="grad_cloudwatch_logs" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C7157B"/>
+      <stop offset="1" stop-color="#8f0f58"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_cloudwatch_logs)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <rect x="9" y="4" width="22" height="32" rx="2"/><line x1="14" y1="13" x2="26" y2="13"/><line x1="14" y1="20" x2="26" y2="20"/><line x1="14" y1="27" x2="22" y2="27"/>
+  </g>
+</svg>

@@ -1,0 +1,10 @@
+[
+  { "ParameterKey": "InstanceType", "ParameterValue": "t3.micro" },
+  { "ParameterKey": "VolumeSize", "ParameterValue": "8" },
+  { "ParameterKey": "LogGroupName", "ParameterValue": "/obs/clase-2/app" },
+  { "ParameterKey": "RetentionInDays", "ParameterValue": "7" },
+  { "ParameterKey": "LogGroupClass", "ParameterValue": "STANDARD" },
+  { "ParameterKey": "ErrorThreshold", "ParameterValue": "1" },
+  { "ParameterKey": "EnableKmsEncryption", "ParameterValue": "false" },
+  { "ParameterKey": "NotificationEmail", "ParameterValue": "" }
+]

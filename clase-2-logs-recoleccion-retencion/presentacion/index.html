@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clase 2 · Logs: recolección, lectura y retención — Observabilidad y Monitoreo en AWS</title>
+  <link rel="stylesheet" href="../../assets/css/slides.css">
+  <link rel="icon" href="../../assets/img/logo-curso.svg">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ============ 1. PORTADA ============ -->
+  <section class="slide slide--title">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span>
+      <span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <img class="title-logo" src="../../assets/img/logo-curso.svg" alt="">
+      <div class="eyebrow">Programa de capacitación · Clase 2 de 5</div>
+      <h1>Logs: recolección, lectura y retención</h1>
+      <p class="lead">Centralizar, consultar y proteger los logs para troubleshooting.</p>
+      <div class="title-meta">
+        <span class="title-chip"><img src="../../assets/img/services/cloudwatch-logs.svg" alt="">CloudWatch Logs</span>
+        <span class="title-chip"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt="">CloudWatch Alarms</span>
+        <span class="title-chip"><img src="../../assets/img/services/cloudformation.svg" alt="">CloudFormation</span>
+        <span class="title-chip">⏱ ~2 horas · 🧪 Laboratorio incluido</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OBJETIVOS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Objetivos</div>
+      <h2>Qué vas a lograr en esta clase</h2>
+      <ul class="checklist">
+        <li>Centralizar los logs de tus aplicaciones y servicios en Amazon CloudWatch Logs.</li>
+        <li>Consultar y analizar logs para tareas de troubleshooting con Logs Insights y Live Tail.</li>
+        <li>Generar métricas y alarmas a partir de patrones en los logs.</li>
+        <li>Gestionar la retención (rotación) y proteger datos sensibles con enmascaramiento y KMS.</li>
+        <li>Declarar todo el pipeline de logs como código en CloudFormation.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 3. MÓDULO 1 — DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 1</div>
+      <h2>Amazon CloudWatch Logs: conceptos y recolección</h2>
+      <p>La jerarquía de los logs, de dónde llegan y cómo elegir la clase de log para optimizar costos.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4. SERVICIO — CLOUDWATCH LOGS ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudwatch-logs.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>Amazon CloudWatch Logs</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Qué es</h3>
+          <p>Servicio administrado para centralizar, almacenar, consultar y acceder en un solo lugar a los logs de aplicaciones, sistemas y servicios de AWS.</p>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Log group:</strong> contenedor con retención, cifrado y políticas.</li>
+            <li><strong>Log stream:</strong> secuencia de eventos de una misma fuente.</li>
+            <li><strong>Log event:</strong> una línea con timestamp + mensaje.</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>💡 En este curso</h3>
+          <p>La app en EC2 envía sus logs a un log group con retención definida. Sobre él se montan el metric filter, la alarma y la consulta guardada de Logs Insights.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. FUENTES + CLASES DE LOG ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Recolección</div>
+      <h2>Fuentes de logs y clases de log</h2>
+      <div class="cols">
+        <div>
+          <h3>De dónde llegan</h3>
+          <ul>
+            <li><strong>Agente de CloudWatch:</strong> archivos de log en EC2 / on-prem.</li>
+            <li><strong>SDK / API:</strong> <code>PutLogEvents</code> desde tu código.</li>
+            <li><strong>Servicios nativos:</strong> Lambda, API Gateway, VPC Flow Logs, ELB y Route 53.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Standard vs Infrequent Access</h3>
+          <ul>
+            <li><strong>Standard:</strong> todas las capacidades (Live Tail, metric &amp; subscription filters, anomaly detection, data protection).</li>
+            <li><strong>Infrequent Access:</strong> menor costo de ingestión; solo Logs Insights, sin Live Tail ni filtros.</li>
+          </ul>
+          <div class="callout callout--tip">
+            <div class="callout-title">Cuándo usar IA</div>
+            <p>Logs forenses o de compliance que se consultan poco.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. MÓDULO 2 — DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 2</div>
+      <h2>Lectura y análisis de logs</h2>
+      <p>Explorar, contar y depurar en tiempo real con Logs Insights, Live Tail y detección de anomalías.</p>
+    </div>
+  </section>
+
+  <!-- ============ 7. LOGS INSIGHTS + LIVE TAIL ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Análisis</div>
+      <h2>Logs Insights, Live Tail y anomalías</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li><strong>Logs Insights:</strong> lenguaje de consulta con <code>fields</code>, <code>filter</code>, <code>stats</code>, <code>parse</code>, <code>sort</code> y <code>limit</code>.</li>
+            <li><strong>Live Tail:</strong> streaming en vivo de eventos recién ingeridos, con filtrado y resaltado.</li>
+            <li><strong>Anomaly detection:</strong> ML que fija líneas base y detecta patrones anómalos.</li>
+          </ul>
+          <div class="callout callout--tip">
+            <div class="callout-title">Buena práctica</div>
+            <p>Acotá el rango de tiempo y filtrá temprano para consultas rápidas y baratas.</p>
+          </div>
+        </div>
+        <div>
+          <div class="code">
+            <pre><span class="c"># Contar errores por período en Logs Insights</span>
+fields @timestamp, @message
+| <span class="k">filter</span> @message like /ERROR/
+| <span class="k">stats</span> count(*) <span class="k">as</span> errores
+    by bin(5m)
+| <span class="k">sort</span> errores desc
+| <span class="k">limit</span> 20</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. MÓDULO 3 — DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 3</div>
+      <h2>De logs a métricas y alarmas</h2>
+      <p>Convertir patrones en los logs en señales accionables: métricas, alarmas y ruteo a otros destinos.</p>
+    </div>
+  </section>
+
+  <!-- ============ 9. METRIC FILTERS + ALARMAS ============ -->
+  <section class="slide slide--service">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="service-hero">
+        <img src="../../assets/img/services/cloudwatch-alarms.svg" alt="">
+        <div>
+          <span class="cat">Management &amp; Governance</span>
+          <h2>Metric filters, alarmas y subscription filters</h2>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Conceptos clave</h3>
+          <ul>
+            <li><strong>Metric filter:</strong> genera una métrica desde un <code>FilterPattern</code> (contar líneas ERROR).</li>
+            <li><strong>Alarma:</strong> vigila esa métrica (Sum) y pasa OK ↔ ALARM al superar el umbral.</li>
+            <li><strong>Subscription filter:</strong> rutea logs a otro destino (Firehose, OpenSearch).</li>
+          </ul>
+        </div>
+        <div class="card card--accent">
+          <h3>⚠️ El detalle que rompe alarmas</h3>
+          <p>El metric filter solo emite un dato cuando hay coincidencias. Definí <code>DefaultValue: 0</code> y ajustá <code>treatMissingData</code> para que la alarma no quede en INSUFFICIENT_DATA.</p>
+          <span class="pill pill--orange">Se usa en el lab</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. MÓDULO 4 — DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 4</div>
+      <h2>Retención, rotación y protección</h2>
+      <p>El ciclo de vida del dato: retención por log group, enmascaramiento de datos sensibles y cifrado con KMS.</p>
+    </div>
+  </section>
+
+  <!-- ============ 11. RETENCIÓN + DATA PROTECTION + KMS ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Ciclo de vida y protección</div>
+      <h2>Retención, enmascaramiento y cifrado</h2>
+      <div class="cards g3">
+        <div class="card">
+          <h3>🗓️ Retención</h3>
+          <p>La "rotación" en la nube: <code>RetentionInDays</code> por log group, de 1 día a 10 años (3653) o indefinida. Sin definirla, el gasto crece sin control.</p>
+        </div>
+        <div class="card">
+          <h3>🛡️ Data protection</h3>
+          <p>Managed data identifiers detectan y enmascaran PII/PHI en cada egreso. Ver el valor original exige el permiso <code>logs:Unmask</code>.</p>
+        </div>
+        <div class="card">
+          <h3>🔐 Cifrado KMS</h3>
+          <p>Asociá una customer managed key (<code>KmsKeyId</code>). La key policy debe autorizar a <code>logs.&lt;region&gt;.amazonaws.com</code>.</p>
+        </div>
+      </div>
+      <div class="callout callout--warn">
+        <div class="callout-title">Ojo</div>
+        <p>La data protection policy solo enmascara eventos ingeridos <strong>después</strong> de aplicarla; no reescribe lo ya almacenado.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 12. MÓDULO 5 — DIVISOR ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">MÓDULO 5</div>
+      <h2>Todo como código</h2>
+      <p>Log group, metric filter, alarma y consulta guardada definidos declarativamente en un solo stack.</p>
+    </div>
+  </section>
+
+  <!-- ============ 13. CLOUDFORMATION — TODO COMO CÓDIGO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Infra como código</div>
+      <h2>El pipeline de logs en CloudFormation</h2>
+      <div class="cols">
+        <div>
+          <ul>
+            <li><code>AWS::Logs::LogGroup</code> con <code>RetentionInDays</code> (y opcional <code>KmsKeyId</code> / <code>LogGroupClass</code>).</li>
+            <li><code>AWS::Logs::MetricFilter</code> con <code>FilterPattern</code> y <code>DefaultValue: 0</code>.</li>
+            <li><code>AWS::CloudWatch::Alarm</code> sobre la métrica del filtro, con <code>AlarmActions</code> a SNS.</li>
+            <li><code>AWS::Logs::QueryDefinition</code> para guardar la consulta de Logs Insights.</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code">
+            <pre><span class="c"># Metric filter que cuenta ERROR</span>
+ErrorMetricFilter:
+  <span class="k">Type</span>: AWS::Logs::MetricFilter
+  <span class="k">Properties</span>:
+    FilterPattern: <span class="s">"ERROR"</span>
+    MetricTransformations:
+      - MetricName: <span class="s">AppErrorCount</span>
+        MetricNamespace: <span class="s">Curso/Obs</span>
+        MetricValue: <span class="s">"1"</span>
+        DefaultValue: <span class="s">0</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 14. DIAGRAMA DE ARQUITECTURA DEL LAB ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Arquitectura del laboratorio</div>
+      <h2>Cómo fluyen los logs</h2>
+      <div class="arch">
+        <div class="flow">
+          <div class="node"><img src="../../assets/img/services/ec2.svg" alt=""><span class="lbl">EC2 + Agent</span><span class="sub">PutLogEvents</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch-logs.svg" alt=""><span class="lbl">Log group</span><span class="sub">retención + KMS</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch.svg" alt=""><span class="lbl">Métrica</span><span class="sub">metric filter</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/cloudwatch-alarms.svg" alt=""><span class="lbl">Alarma</span><span class="sub">OK / ALARM</span></div>
+          <span class="arrow">→</span>
+          <div class="node"><img src="../../assets/img/services/sns.svg" alt=""><span class="lbl">SNS</span><span class="sub">notifica</span></div>
+        </div>
+        <p class="arch-caption">Ramas paralelas desde el mismo log group: Logs Insights (consulta guardada) y Live Tail para el troubleshooting. Todo declarado en un stack de CloudFormation; IAM y KMS son transversales.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 15. LABORATORIO ============ -->
+  <section class="slide">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="eyebrow">Manos a la obra</div>
+      <h2>Laboratorio de la clase</h2>
+      <div class="callout callout--lab">
+        <div class="callout-title">🧪 Qué vas a construir</div>
+        <p>La app en EC2 envía sus logs a un log group con retención definida. Un metric filter cuenta las líneas ERROR, una alarma las vigila y (opcional) publica en SNS. Todo declarado en la plantilla de CloudFormation, con una consulta de Logs Insights guardada.</p>
+      </div>
+      <div class="cards g3">
+        <div class="card"><h3>1 · Desplegar</h3><p>Crear el stack: log group, metric filter, alarma, QueryDefinition y topic SNS.</p></div>
+        <div class="card"><h3>2 · Verificar</h3><p>Ver los logs en el log group y la alarma en estado OK.</p></div>
+        <div class="card"><h3>3 · Troubleshooting</h3><p>Generar líneas ERROR, ver la alarma en ALARM y contar errores con Logs Insights.</p></div>
+      </div>
+      <p class="muted" style="margin-top:16px">Guía paso a paso: <code>laboratorio/guia.html</code> · Plantilla: <code>laboratorio/template.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- ============ 16. CIERRE ============ -->
+  <section class="slide slide--section">
+    <header class="slide-top">
+      <img src="../../assets/img/logo-curso.svg" alt="">
+      <span class="st-course">Observabilidad y Monitoreo en AWS</span>
+      <span class="st-sep">·</span><span class="st-class">Clase 2</span>
+    </header>
+    <div class="slide-inner">
+      <div class="sec-index">RESUMEN</div>
+      <h2>Lo que te llevás</h2>
+      <ul>
+        <li>Los logs se centralizan en CloudWatch Logs: log group → log stream → log event.</li>
+        <li>Logs Insights y Live Tail te dan el troubleshooting; los metric filters lo convierten en alarmas.</li>
+        <li>La retención, el enmascaramiento y KMS gobiernan el costo y la protección del dato.</li>
+        <li>Próximo paso: hacer el laboratorio y pasar a la Clase 3 (archivado y explotación con Athena).</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+<script src="../../assets/js/slides.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Amazon S3">
+  <defs>
+    <linearGradient id="grad_s3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3F8624"/>
+      <stop offset="1" stop-color="#2d6019"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="url(#grad_s3)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(20,20)">
+    <path d="M9 11 L31 11 L28 34 L12 34 Z"/><ellipse cx="20" cy="11" rx="11" ry="3.2"/>
+  </g>
+</svg>
