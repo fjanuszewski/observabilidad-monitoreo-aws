@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1218 604" width="1218" height="604" font-family="Segoe UI,Helvetica,Arial,sans-serif">
+<defs><marker id="arw" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8 Z" fill="#b3590f"/></marker><filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#16294a" flood-opacity="0.10"/></filter></defs>
+<rect x="0" y="0" width="1218" height="604" rx="18" fill="#f6f9fc"/>
+<text x="44" y="46" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="20" font-weight="800" fill="#16294a">Arquitectura del laboratorio · Clase 3</text>
+<rect x="256" y="62" width="468" height="338" rx="16" fill="#7A3FF2" fill-opacity="0.05" stroke="#7A3FF2" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="7 5"/>
+<rect x="256" y="49" width="167" height="24" rx="7" fill="#7A3FF2"/>
+<text x="340" y="65" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#fff">Pipeline de archivado</text>
+<line x1="222" y1="320" x2="282" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="229" y="309" width="46" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="252" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">stream</text>
+<line x1="460" y1="320" x2="520" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="464" y="309" width="52" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="490" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">entrega</text>
+<line x1="609" y1="266" x2="609" y2="196" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="574" y="220" width="70" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="609" y="234" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">transición</text>
+<line x1="698" y1="320" x2="758" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="699" y="309" width="58" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="728" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">cataloga</text>
+<line x1="936" y1="320" x2="996" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="940" y="309" width="52" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="966" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">esquema</text>
+<rect x="44" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/cloudwatch-logs.svg" x="114" y="278" width="38" height="38"/>
+<text x="133" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">CloudWatch Logs</text>
+<text x="133" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">origen de logs</text>
+<rect x="282" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/firehose.svg" x="352" y="278" width="38" height="38"/>
+<text x="371" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">Data Firehose</text>
+<text x="371" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">subscription filter</text>
+<rect x="520" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/s3.svg" x="590" y="278" width="38" height="38"/>
+<text x="609" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">Amazon S3</text>
+<text x="609" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">partición por fecha</text>
+<rect x="520" y="88" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/glacier.svg" x="590" y="100" width="38" height="38"/>
+<text x="609" y="154" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">S3 Glacier</text>
+<text x="609" y="173" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">lifecycle</text>
+<rect x="758" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/glue.svg" x="828" y="278" width="38" height="38"/>
+<text x="847" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">Glue Data Catalog</text>
+<text x="847" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">base + tabla + SerDe</text>
+<rect x="996" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/athena.svg" x="1066" y="278" width="38" height="38"/>
+<text x="1085" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">Amazon Athena</text>
+<text x="1085" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">SQL de investigación</text>
+<rect x="44" y="444" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/iam.svg" x="114" y="456" width="38" height="38"/>
+<text x="133" y="510" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">IAM Roles</text>
+<text x="133" y="529" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">CWL → Firehose · S3</text>
+</svg>

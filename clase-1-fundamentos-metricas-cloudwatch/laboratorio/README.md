@@ -9,6 +9,12 @@ y una métrica personalizada con `PutMetricData`. Después verificás los datos 
 **CloudWatch** y diagnosticás, por **SSM Session Manager**, por qué dejan de llegar
 métricas cuando el agente se detiene.
 
+## Arquitectura
+
+![Diagrama de arquitectura del laboratorio](arquitectura.png)
+
+*Todos los componentes que despliega `template.yaml`.*
+
 ## Qué despliega
 
 | Recurso | Servicio | Para qué |

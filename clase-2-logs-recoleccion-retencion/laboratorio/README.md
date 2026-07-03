@@ -5,6 +5,12 @@ se define su **retención**, un **metric filter** cuenta los errores, una **alar
 avisa cuando superan un umbral y una **consulta guardada de Logs Insights** ayuda a
 investigarlos. Todo declarado en una plantilla de **CloudFormation**.
 
+## Arquitectura
+
+![Diagrama de arquitectura del laboratorio](arquitectura.png)
+
+*Todos los componentes que despliega `template.yaml`.*
+
 ## Qué despliega
 
 | Recurso | Servicio | Para qué |

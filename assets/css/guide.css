@@ -178,6 +178,14 @@ th { background: var(--navy); color: #fff; font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
 tbody tr:nth-child(even) { background: var(--paper-2); }
 
+/* Figura de diagrama de arquitectura embebida */
+.arch-figure {
+  margin: 18px 0; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 14px; padding: 14px; box-shadow: var(--shadow-sm); overflow-x: auto;
+}
+.arch-figure svg { width: 100%; min-width: 520px; height: auto; display: block; }
+.arch-figure figcaption { color: var(--muted); font-size: 13px; text-align: center; margin-top: 10px; }
+
 /* Troubleshooting (accordion) --------------------------------------------- */
 .trouble details {
   background: var(--paper); border: 1px solid var(--line); border-radius: 12px;

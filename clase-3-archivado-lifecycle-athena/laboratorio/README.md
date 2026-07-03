@@ -4,6 +4,12 @@ Construí el pipeline de **archivado económico** de logs y explotalos con **SQL
 Amazon Athena** para una investigación de seguridad, todo definido como código en
 una única plantilla de CloudFormation.
 
+## Arquitectura
+
+![Diagrama de arquitectura del laboratorio](arquitectura.png)
+
+*Todos los componentes que despliega `template.yaml`.*
+
 ## Qué despliega
 
 El `template.yaml` crea, en una sola pasada, el pipeline completo:

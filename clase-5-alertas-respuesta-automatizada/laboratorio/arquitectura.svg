@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 980 504" width="980" height="504" font-family="Segoe UI,Helvetica,Arial,sans-serif">
+<defs><marker id="arw" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8 Z" fill="#b3590f"/></marker><filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#16294a" flood-opacity="0.10"/></filter></defs>
+<rect x="0" y="0" width="980" height="504" rx="18" fill="#f6f9fc"/>
+<text x="44" y="46" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="20" font-weight="800" fill="#16294a">Arquitectura del laboratorio · Clase 5</text>
+<line x1="222" y1="320" x2="282" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="226" y="309" width="52" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="252" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">métrica</text>
+<line x1="460" y1="320" x2="520" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="467" y="309" width="46" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="490" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">estado</text>
+<line x1="698" y1="320" x2="758" y2="320" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="702" y="309" width="52" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="728" y="323" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">dispara</text>
+<line x1="681" y1="266" x2="775" y2="196" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="699" y="220" width="58" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="728" y="234" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">notifica</text>
+<line x1="371" y1="266" x2="371" y2="196" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="339" y="220" width="64" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="371" y="234" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">visualiza</text>
+<line x1="609" y1="196" x2="609" y2="266" stroke="#b3590f" stroke-width="2.4" marker-end="url(#arw)"/>
+<rect x="580" y="220" width="58" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="609" y="234" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">permisos</text>
+<path d="M 847 374 L 847 470 L 133 470 L 133 374" fill="none" stroke="#b3590f" stroke-width="2.4" stroke-dasharray="6 5" marker-end="url(#arw)"/>
+<rect x="464" y="459" width="52" height="20" rx="6" fill="#fff" stroke="#e4eaf3"/>
+<text x="490" y="473" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#1e3a63">remedia</text>
+<rect x="282" y="88" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/cloudwatch-dashboards.svg" x="352" y="100" width="38" height="38"/>
+<text x="371" y="154" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">Dashboard</text>
+<text x="371" y="173" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">métricas + logs</text>
+<rect x="520" y="88" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/iam.svg" x="590" y="100" width="38" height="38"/>
+<text x="609" y="154" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">IAM Roles</text>
+<text x="609" y="173" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">EventBridge · SSM</text>
+<rect x="758" y="88" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/sns.svg" x="828" y="100" width="38" height="38"/>
+<text x="847" y="154" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">SNS</text>
+<text x="847" y="173" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">email</text>
+<rect x="44" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/ec2.svg" x="114" y="278" width="38" height="38"/>
+<text x="133" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">EC2</text>
+<text x="133" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">carga monitoreada</text>
+<rect x="282" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/cloudwatch-alarms.svg" x="352" y="278" width="38" height="38"/>
+<text x="371" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">Alarmas</text>
+<text x="371" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">métrica·compuesta·anomalía</text>
+<rect x="520" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/eventbridge.svg" x="590" y="278" width="38" height="38"/>
+<text x="609" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">EventBridge</text>
+<text x="609" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">regla + patrón</text>
+<rect x="758" y="266" width="178" height="108" rx="14" fill="#ffffff" stroke="#e4eaf3" stroke-width="1.4" filter="url(#sh)"/>
+<image href="../../assets/img/services/systems-manager.svg" x="828" y="278" width="38" height="38"/>
+<text x="847" y="332" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#16294a">SSM Automation</text>
+<text x="847" y="351" text-anchor="middle" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5" fill="#5f6f86">runbook remedia</text>
+</svg>
