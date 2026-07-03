@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Observabilidad y Monitoreo en AWS — Curso práctico</title>
+  <meta name="description" content="Curso práctico de 5 clases con presentaciones y laboratorios en AWS CloudFormation.">
+  <link rel="icon" href="assets/img/logo-curso.svg">
+  <style>
+    :root{
+      --navy:#16294a;--navy-2:#1e3a63;--orange:#e8792b;--orange-2:#f59a4d;
+      --ink:#1f2a3a;--muted:#5a6b82;--paper:#fff;--paper-2:#f4f7fb;--line:#e2e8f2;
+      --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      --shadow:0 18px 48px rgba(16,32,60,.16);--shadow-sm:0 6px 18px rgba(16,32,60,.10);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:var(--font);color:var(--ink);background:var(--paper-2);-webkit-font-smoothing:antialiased;line-height:1.6}
+    a{color:var(--orange);text-decoration:none}
+
+    .hero{
+      background:radial-gradient(1200px 500px at 80% -10%,rgba(232,121,43,.18),transparent 60%),linear-gradient(160deg,var(--navy-2),var(--navy) 72%);
+      color:#fff;padding:64px 24px 72px;text-align:center;
+    }
+    .hero img{width:88px;height:88px;filter:drop-shadow(0 10px 26px rgba(0,0,0,.4));margin-bottom:20px}
+    .hero .eyebrow{text-transform:uppercase;letter-spacing:.18em;font-weight:700;font-size:12.5px;color:var(--orange-2);margin-bottom:10px}
+    .hero h1{margin:0 0 12px;font-size:clamp(30px,5vw,52px);letter-spacing:-.02em}
+    .hero p{max-width:720px;margin:0 auto;color:rgba(255,255,255,.8);font-size:clamp(15px,1.8vw,18px)}
+    .hero .cta{margin-top:26px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:11px 20px;font-weight:700;font-size:14.5px;border:1px solid transparent}
+    .btn-primary{background:linear-gradient(135deg,var(--orange-2),var(--orange));color:#fff;box-shadow:var(--shadow-sm)}
+    .btn-ghost{border-color:rgba(255,255,255,.25);color:#fff;background:rgba(255,255,255,.06)}
+    .badges{margin-top:22px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+    .badge{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9);border-radius:999px;padding:6px 14px;font-size:13px}
+
+    .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+    .intro{margin:44px auto 8px;max-width:820px;text-align:center;color:var(--muted);font-size:16.5px}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:22px;margin:36px 0 10px}
+    .card{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;position:relative;overflow:hidden}
+    .card::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--orange-2),var(--orange))}
+    .card .num{width:40px;height:40px;border-radius:11px;background:var(--navy);color:#fff;font-weight:800;font-size:18px;display:grid;place-items:center;margin-bottom:14px}
+    .card h3{margin:0 0 6px;color:var(--navy);font-size:19px;line-height:1.2}
+    .card .sub{color:var(--muted);font-size:13.5px;margin-bottom:14px}
+    .icons{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+    .icons img{width:34px;height:34px}
+    .card .links{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
+    .lnk{font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:9px;padding:8px 12px;color:var(--navy-2);background:var(--paper-2)}
+    .lnk:hover{border-color:var(--orange);color:var(--orange)}
+    .lnk-primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+    .lnk-primary:hover{background:var(--navy-2);color:#fff}
+
+    .how{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:26px 28px;margin:30px 0;box-shadow:var(--shadow-sm)}
+    .how h2{margin:0 0 14px;color:var(--navy);font-size:22px}
+    .how ul{margin:0;padding-left:1.1em}
+    .how li{margin:.4em 0}
+    .how code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;color:var(--navy-2)}
+
+    footer{text-align:center;color:var(--muted);font-size:13.5px;padding:40px 22px 60px}
+  </style>
+</head>
+<body>
+
+  <header class="hero">
+    <img src="assets/img/logo-curso.svg" alt="">
+    <div class="eyebrow">Programa de capacitación</div>
+    <h1>Observabilidad y Monitoreo en AWS</h1>
+    <p>Curso práctico de <strong>5 clases</strong> con laboratorios en <strong>AWS CloudFormation</strong>. Métricas, logs, trazas, archivado, contenedores y respuesta automatizada a incidentes — todo como código, de punta a punta.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#clases">Ver las clases ↓</a>
+      <a class="btn btn-ghost" href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws" target="_blank" rel="noopener">Ver en GitHub</a>
+    </div>
+    <div class="badges">
+      <span class="badge">5 clases · ~2 h c/u</span>
+      <span class="badge">Laboratorios en CloudFormation</span>
+      <span class="badge">Nivel intermedio</span>
+      <span class="badge">Español</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p class="intro">Cada clase tiene una <strong>presentación</strong> (con diagramas de arquitectura y explicación de cada servicio) y un <strong>laboratorio</strong> con su plantilla de CloudFormation y una <strong>guía paso a paso</strong>, desde abrir la consola de AWS hasta la limpieza.</p>
+
+    <section class="grid" id="clases">
+
+      <article class="card">
+        <div class="num">1</div>
+        <h3>Fundamentos, métricas y monitoreo de EC2 con CloudWatch</h3>
+        <div class="sub">Los pilares de la observabilidad y las métricas de tu infraestructura</div>
+        <div class="icons">
+          <img src="assets/img/services/cloudwatch.svg" alt="CloudWatch" title="CloudWatch">
+          <img src="assets/img/services/ec2.svg" alt="EC2" title="EC2">
+          <img src="assets/img/services/cloudformation.svg" alt="CloudFormation" title="CloudFormation">
+          <img src="assets/img/services/systems-manager.svg" alt="Systems Manager" title="Systems Manager">
+        </div>
+        <div class="links">
+          <a class="lnk lnk-primary" href="clase-1-fundamentos-metricas-cloudwatch/presentacion/index.html">Presentación</a>
+          <a class="lnk" href="clase-1-fundamentos-metricas-cloudwatch/laboratorio/guia.html">Guía del lab</a>
+          <a class="lnk" href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws/blob/main/clase-1-fundamentos-metricas-cloudwatch/laboratorio/template.yaml" target="_blank" rel="noopener">CloudFormation</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="num">2</div>
+        <h3>Logs: recolección, lectura y retención</h3>
+        <div class="sub">Centralizar, consultar y proteger los logs para troubleshooting</div>
+        <div class="icons">
+          <img src="assets/img/services/cloudwatch-logs.svg" alt="CloudWatch Logs" title="CloudWatch Logs">
+          <img src="assets/img/services/cloudwatch-alarms.svg" alt="Alarmas" title="Alarmas">
+          <img src="assets/img/services/kms.svg" alt="KMS" title="KMS">
+          <img src="assets/img/services/sns.svg" alt="SNS" title="SNS">
+        </div>
+        <div class="links">
+          <a class="lnk lnk-primary" href="clase-2-logs-recoleccion-retencion/presentacion/index.html">Presentación</a>
+          <a class="lnk" href="clase-2-logs-recoleccion-retencion/laboratorio/guia.html">Guía del lab</a>
+          <a class="lnk" href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws/blob/main/clase-2-logs-recoleccion-retencion/laboratorio/template.yaml" target="_blank" rel="noopener">CloudFormation</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="num">3</div>
+        <h3>Archivado, ciclo de vida y explotación con Athena</h3>
+        <div class="sub">Archivar económicamente y explotar logs con SQL</div>
+        <div class="icons">
+          <img src="assets/img/services/firehose.svg" alt="Data Firehose" title="Data Firehose">
+          <img src="assets/img/services/s3.svg" alt="S3" title="S3">
+          <img src="assets/img/services/glacier.svg" alt="Glacier" title="Glacier">
+          <img src="assets/img/services/athena.svg" alt="Athena" title="Athena">
+        </div>
+        <div class="links">
+          <a class="lnk lnk-primary" href="clase-3-archivado-lifecycle-athena/presentacion/index.html">Presentación</a>
+          <a class="lnk" href="clase-3-archivado-lifecycle-athena/laboratorio/guia.html">Guía del lab</a>
+          <a class="lnk" href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws/blob/main/clase-3-archivado-lifecycle-athena/laboratorio/template.yaml" target="_blank" rel="noopener">CloudFormation</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="num">4</div>
+        <h3>Observabilidad de contenedores (ECS + Fargate)</h3>
+        <div class="sub">Métricas, logs y trazas de cargas en contenedores</div>
+        <div class="icons">
+          <img src="assets/img/services/ecs.svg" alt="ECS" title="ECS">
+          <img src="assets/img/services/fargate.svg" alt="Fargate" title="Fargate">
+          <img src="assets/img/services/container-insights.svg" alt="Container Insights" title="Container Insights">
+          <img src="assets/img/services/xray.svg" alt="X-Ray" title="X-Ray">
+        </div>
+        <div class="links">
+          <a class="lnk lnk-primary" href="clase-4-observabilidad-contenedores-ecs-fargate/presentacion/index.html">Presentación</a>
+          <a class="lnk" href="clase-4-observabilidad-contenedores-ecs-fargate/laboratorio/guia.html">Guía del lab</a>
+          <a class="lnk" href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws/blob/main/clase-4-observabilidad-contenedores-ecs-fargate/laboratorio/template.yaml" target="_blank" rel="noopener">CloudFormation</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="num">5</div>
+        <h3>Alertas, respuesta automatizada y cierre end-to-end</h3>
+        <div class="sub">Alertas accionables, auto-remediación y visualización unificada</div>
+        <div class="icons">
+          <img src="assets/img/services/cloudwatch-alarms.svg" alt="Alarmas" title="Alarmas">
+          <img src="assets/img/services/eventbridge.svg" alt="EventBridge" title="EventBridge">
+          <img src="assets/img/services/systems-manager.svg" alt="Systems Manager" title="Systems Manager">
+          <img src="assets/img/services/cloudwatch-dashboards.svg" alt="Dashboards" title="Dashboards">
+        </div>
+        <div class="links">
+          <a class="lnk lnk-primary" href="clase-5-alertas-respuesta-automatizada/presentacion/index.html">Presentación</a>
+          <a class="lnk" href="clase-5-alertas-respuesta-automatizada/laboratorio/guia.html">Guía del lab</a>
+          <a class="lnk" href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws/blob/main/clase-5-alertas-respuesta-automatizada/laboratorio/template.yaml" target="_blank" rel="noopener">CloudFormation</a>
+        </div>
+      </article>
+
+    </section>
+
+    <section class="how">
+      <h2>Cómo usar el material</h2>
+      <ul>
+        <li><strong>Presentaciones:</strong> navegá con <code>←</code> / <code>→</code>, <code>O</code> para vista general y <code>F</code> para pantalla completa.</li>
+        <li><strong>Laboratorios:</strong> subí el <code>template.yaml</code> a CloudFormation (o usá <code>aws cloudformation deploy</code>). Son de bajo costo y borrables; cada guía cierra con la limpieza.</li>
+        <li><strong>Offline:</strong> también podés clonar el repo y abrir los HTML localmente. Para evitar restricciones de <code>file://</code>, serví la carpeta con <code>python3 -m http.server</code>.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    Observabilidad y Monitoreo en AWS · Material educativo (MIT) ·
+    <a href="https://github.com/fjanuszewski/observabilidad-monitoreo-aws" target="_blank" rel="noopener">github.com/fjanuszewski/observabilidad-monitoreo-aws</a>
+  </footer>
+
+</body>
+</html>
