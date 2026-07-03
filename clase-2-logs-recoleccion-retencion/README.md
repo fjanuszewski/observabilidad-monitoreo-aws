@@ -108,3 +108,11 @@ Logs Insights para localizar y contar los errores por período.
 <div align="center">
   <sub>Parte del curso <a href="../README.md">Observabilidad y Monitoreo en AWS</a> · Clase 2 de 5</sub>
 </div>
+
+## 🖥️ Descargar la presentación (PPTX)
+
+Además del deck HTML, la presentación está disponible en **PowerPoint**:
+
+- [`presentacion/Observabilidad-AWS-Clase-2.pptx`](presentacion/Observabilidad-AWS-Clase-2.pptx) — formato 16:9, con notas del orador.
+
+> Podés abrirlo en PowerPoint/Keynote o **importarlo a Google Slides** (Archivo → Importar presentación).

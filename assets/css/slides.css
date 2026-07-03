@@ -9,6 +9,7 @@
   --navy-3:    #24457a;
   --orange:    #e8792b;
   --orange-2:  #f59a4d;
+  --accent-ink:#b3590f;   /* naranja oscurecido para TEXTO sobre fondos claros (contraste AA) */
   --ink:       #1f2a3a;
   --muted:     #5a6b82;
   --paper:     #ffffff;
@@ -80,16 +81,34 @@ html, body {
 }
 .slide-top img { width: 26px; height: 26px; border-radius: 7px; }
 .slide-top .st-course { font-weight: 700; color: var(--navy); }
-.slide-top .st-sep { color: var(--line); }
+.slide-top .st-sep { color: #7a89a1; }
 .slide-top .st-class { color: var(--muted); }
 .slide-top .st-spacer { flex: 1; }
 .slide-top .st-count { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--navy-2); }
 
-/* contador y separador legibles sobre slides oscuras */
+/* contador, separador y nombre de clase legibles sobre slides oscuras */
 .slide--title .slide-top .st-count,
 .slide--section .slide-top .st-count { color: rgba(255,255,255,.9); }
 .slide--title .slide-top .st-sep,
-.slide--section .slide-top .st-sep { color: rgba(255,255,255,.28); }
+.slide--section .slide-top .st-sep { color: rgba(255,255,255,.3); }
+.slide--title .slide-top .st-class,
+.slide--section .slide-top .st-class { color: rgba(255,255,255,.72); }
+
+/* Texto del cuerpo legible sobre slides oscuras (portada, divisores, cierre).
+   En estos decks las slides oscuras solo contienen texto (sin tarjetas ni
+   callouts de fondo claro), por lo que aclarar todo el texto es seguro. */
+.slide--title, .slide--section { color: rgba(255,255,255,.88); }
+.slide--title p, .slide--title li, .slide--title ul, .slide--title ol,
+.slide--section p, .slide--section li, .slide--section ul, .slide--section ol {
+  color: rgba(255,255,255,.88);
+}
+.slide--title h1, .slide--title h2, .slide--title h3, .slide--title strong,
+.slide--section h1, .slide--section h2, .slide--section h3, .slide--section strong {
+  color: #ffffff;
+}
+.slide--title li::marker, .slide--section li::marker { color: var(--orange-2); }
+/* si una slide oscura usara eyebrow, mantenerlo brillante (no el naranja de texto) */
+.slide--title .eyebrow, .slide--section .eyebrow { color: var(--orange-2); }
 
 .slide { padding-top: calc(56px + var(--slide-pad)); }
 
@@ -127,7 +146,7 @@ h1, h2, h3 { color: var(--navy); line-height: 1.12; margin: 0 0 .4em; letter-spa
 .slide p { font-size: clamp(15px, 1.55vw, 18px); line-height: 1.6; color: var(--ink); }
 .eyebrow {
   text-transform: uppercase; letter-spacing: .16em; font-weight: 700;
-  font-size: 12.5px; color: var(--orange); margin-bottom: .5em;
+  font-size: 12.5px; color: var(--accent-ink); margin-bottom: .5em;
 }
 .lead { font-size: clamp(16px, 1.8vw, 20px) !important; color: var(--muted) !important; }
 
@@ -137,7 +156,7 @@ li::marker { color: var(--orange); }
 li strong { color: var(--navy-2); }
 
 .muted { color: var(--muted); }
-.accent { color: var(--orange); }
+.accent { color: var(--accent-ink); }
 mark { background: #fde8d3; color: var(--navy); padding: 0 .25em; border-radius: 3px; }
 
 /* -------------------------------------------------- Slide de portada ------ */
@@ -223,7 +242,7 @@ mark { background: #fde8d3; color: var(--navy); padding: 0 .25em; border-radius:
 .slide--service .service-hero h2::after { display: none; }
 .slide--service .service-hero .cat {
   display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .1em; color: var(--orange);
+  text-transform: uppercase; letter-spacing: .1em; color: var(--accent-ink);
 }
 
 /* --------------------------------------------------- Diagrama arquitectura */
@@ -247,7 +266,7 @@ mark { background: #fde8d3; color: var(--navy); padding: 0 .25em; border-radius:
 .node img { width: 40px; height: 40px; }
 .node .lbl { font-size: 12.5px; font-weight: 700; color: var(--navy); text-align: center; line-height: 1.2; }
 .node .sub { font-size: 11px; color: var(--muted); }
-.arrow { color: var(--orange); font-size: 22px; font-weight: 700; }
+.arrow { color: var(--accent-ink); font-size: 22px; font-weight: 700; }
 .flow-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 
 /* ------------------------------------------------------------ Callouts ---- */
@@ -259,7 +278,7 @@ mark { background: #fde8d3; color: var(--navy); padding: 0 .25em; border-radius:
 .callout .callout-title { font-weight: 800; margin-bottom: .25em; display: flex; align-items: center; gap: 8px; }
 .callout p, .callout li { font-size: 15px; margin: .2em 0; }
 .callout--lab { background: var(--cream); border-color: #f4c69a; }
-.callout--lab .callout-title { color: var(--orange); }
+.callout--lab .callout-title { color: var(--accent-ink); }
 .callout--tip { background: #eef8f0; border-color: #bfe3c6; }
 .callout--tip .callout-title { color: var(--ok); }
 .callout--warn { background: #fdf0ef; border-color: #f3c2c2; }

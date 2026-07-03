@@ -142,3 +142,11 @@ causa del reinicio.
 | ← | [Clase 3 · Archivado, ciclo de vida y explotación con Athena](../clase-3-archivado-lifecycle-athena/) | Archivar y explotar con SQL |
 | **▸** | **Clase 4 · Observabilidad de contenedores (ECS/Fargate)** | **Contenedores** |
 | → | [Clase 5 · Alertas y respuesta automatizada](../clase-5-alertas-respuesta-automatizada/) | Alertas y automatización |
+
+## 🖥️ Descargar la presentación (PPTX)
+
+Además del deck HTML, la presentación está disponible en **PowerPoint**:
+
+- [`presentacion/Observabilidad-AWS-Clase-4.pptx`](presentacion/Observabilidad-AWS-Clase-4.pptx) — formato 16:9, con notas del orador.
+
+> Podés abrirlo en PowerPoint/Keynote o **importarlo a Google Slides** (Archivo → Importar presentación).

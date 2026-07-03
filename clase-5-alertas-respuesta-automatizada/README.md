@@ -113,3 +113,11 @@ un patrón de EventBridge que no coincide con el evento de la alarma (la regla n
 de IAM sin permiso para que EventBridge invoque la automatización o para que el runbook actúe sobre la
 instancia, una suscripción de SNS sin confirmar (no llega el email), y una alarma compuesta o de
 anomalía mal configurada que genera ruido o no detecta el incidente.
+
+## 🖥️ Descargar la presentación (PPTX)
+
+Además del deck HTML, la presentación está disponible en **PowerPoint**:
+
+- [`presentacion/Observabilidad-AWS-Clase-5.pptx`](presentacion/Observabilidad-AWS-Clase-5.pptx) — formato 16:9, con notas del orador.
+
+> Podés abrirlo en PowerPoint/Keynote o **importarlo a Google Slides** (Archivo → Importar presentación).

@@ -137,3 +137,11 @@ puerto sensible** (por ejemplo 22 o 3389) **y cuándo**, filtrando por
 | ← | [Clase 2 · Logs, recolección y retención](../clase-2-logs-recoleccion-retencion/) | Recolectar y retener logs |
 | **▸** | **Clase 3 · Archivado, ciclo de vida y explotación con Athena** | **Archivar y explotar con SQL** |
 | → | [Clase 4 · Observabilidad de contenedores (ECS/Fargate)](../clase-4-observabilidad-contenedores-ecs-fargate/) | Contenedores |
+
+## 🖥️ Descargar la presentación (PPTX)
+
+Además del deck HTML, la presentación está disponible en **PowerPoint**:
+
+- [`presentacion/Observabilidad-AWS-Clase-3.pptx`](presentacion/Observabilidad-AWS-Clase-3.pptx) — formato 16:9, con notas del orador.
+
+> Podés abrirlo en PowerPoint/Keynote o **importarlo a Google Slides** (Archivo → Importar presentación).
