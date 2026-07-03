@@ -132,6 +132,18 @@ html, body {
   border-radius: 4px; padding: 1px 5px; color: var(--navy-2);
 }
 
+/* Botón para volver al inicio del curso (inyectado por slides.js) */
+.deck-home {
+  position: fixed; left: 14px; bottom: 14px; z-index: 21;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 700; text-decoration: none;
+  color: var(--navy-2); background: rgba(255,255,255,.92);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px;
+  box-shadow: var(--shadow-sm); backdrop-filter: blur(4px);
+}
+.deck-home:hover { border-color: var(--orange); color: var(--orange); }
+.deck-home .h-ico { font-size: 14px; line-height: 1; }
+
 /* ------------------------------------------------------------ Tipografía -- */
 h1, h2, h3 { color: var(--navy); line-height: 1.12; margin: 0 0 .4em; letter-spacing: -.01em; }
 .slide h2 {

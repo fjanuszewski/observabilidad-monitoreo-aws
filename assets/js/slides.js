@@ -29,6 +29,16 @@
     document.body.appendChild(hint);
   }
 
+  // Botón para volver al inicio del curso
+  if (!document.querySelector(".deck-home")) {
+    var home = document.createElement("a");
+    home.className = "deck-home";
+    home.href = "../../index.html";
+    home.setAttribute("title", "Volver al inicio del curso");
+    home.innerHTML = '<span class="h-ico">⌂</span> Inicio';
+    document.body.appendChild(home);
+  }
+
   // Inserta contador en cada barra superior
   slides.forEach(function (s, i) {
     var top = s.querySelector(".slide-top");

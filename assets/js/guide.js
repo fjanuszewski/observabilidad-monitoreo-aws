@@ -5,6 +5,26 @@
 (function () {
   "use strict";
 
+  // --- botón "Inicio" en la barra superior + logo clickeable --------------
+  var gtop = document.querySelector(".g-top");
+  if (gtop) {
+    var logo = gtop.querySelector("img");
+    if (logo && !logo.closest("a.g-logo")) {
+      var la = document.createElement("a");
+      la.className = "g-logo"; la.href = "../../index.html";
+      la.setAttribute("title", "Volver al inicio del curso");
+      logo.parentNode.insertBefore(la, logo); la.appendChild(logo);
+    }
+    if (!gtop.querySelector(".g-home")) {
+      var home = document.createElement("a");
+      home.className = "g-home"; home.href = "../../index.html";
+      home.setAttribute("title", "Volver al inicio del curso");
+      home.innerHTML = '<span class="h-ico">⌂</span> Inicio';
+      var badge = gtop.querySelector(".g-badge");
+      if (badge) gtop.insertBefore(home, badge); else gtop.appendChild(home);
+    }
+  }
+
   // --- barra de progreso de lectura ---------------------------------------
   var bar = document.querySelector(".g-progress");
   if (!bar) { bar = document.createElement("div"); bar.className = "g-progress"; document.body.appendChild(bar); }
